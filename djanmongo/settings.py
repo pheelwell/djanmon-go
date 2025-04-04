@@ -1,4 +1,5 @@
 import os
+import dj_database_url
 from pathlib import Path
 from datetime import timedelta # Import timedelta
 
@@ -9,12 +10,14 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/4.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-your-secret-key-here' # CHANGE THIS!
+SECRET_KEY = os.environ.get('SECRET_KEY', 'your-development-secret-key') # ADD this line, replace the placeholder
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.environ.get('DEBUG', 'True') == 'True' # MODIFY this line (or add if missing)
 
-ALLOWED_HOSTS = []
+# Get allowed hosts from env var, fallback for local dev
+ALLOWED_HOSTS_STRING = os.environ.get('DJANGO_ALLOWED_HOSTS', '127.0.0.1,localhost') # ADD or MODIFY this
+ALLOWED_HOSTS = ALLOWED_HOSTS_STRING.split(',') if ALLOWED_HOSTS_STRING else [] # MODIFY this line
 
 # Application definition
 
@@ -44,9 +47,10 @@ INSTALLED_APPS = [
     'game.apps.GameConfig',
 ]
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware', # ADD this line (high up, usually before CommonMiddleware)
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware', # Add WhiteNoise if serving static files via Django/Gunicorn
     'django.contrib.sessions.middleware.SessionMiddleware',
-    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -77,24 +81,25 @@ WSGI_APPLICATION = 'wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/4.0/ref/settings/#databases
 
-STATIC_URL = 'static/'
+DATABASE_URL = os.environ.get('DATABASE_URL') # ADD this line
 
-
-DATABASES = {
-    #'default': {
-    #    'ENGINE': 'django.db.backends.postgresql', # Or your preferred DB
-    #    'NAME': 'pokemon_game_db',
-    #    'USER': 'your_db_user',
-    #    'PASSWORD': 'your_db_password',
-    #    'HOST': 'localhost', # Or your DB host
-    #    'PORT': '5432',      # Or your DB port
-    #}
-    # Or use SQLite for simple setup:
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+if DATABASE_URL:
+    # Production/Render environment: Use DATABASE_URL from environment
+    DATABASES = {
+        'default': dj_database_url.config(
+            default=DATABASE_URL,
+            conn_max_age=600, # Recommended for persistent connections
+            ssl_require=True  # Render PostgreSQL requires SSL
+        )
     }
-}
+else:
+    # Local development environment: Use SQLite
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3', # Assumes db.sqlite3 is in the parent dir of settings.py
+        }
+    }
 
 # --- Custom User Model ---
 AUTH_USER_MODEL = 'users.User'
@@ -151,26 +156,31 @@ SIMPLE_JWT = {
 
 # --- CORS Settings ---
 # Allow requests from the Vue development server
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:5173", # Default Vite dev server port
-    "http://127.0.0.1:5173",
-    # Add other origins if needed (e.g., your production frontend URL)
-]
-# Allow cookies/auth headers to be sent
-CORS_ALLOW_CREDENTIALS = True 
+if DEBUG:
+    # Allow Vite dev server origin during development
+    CORS_ALLOWED_ORIGINS = [
+        'http://localhost:5173', # Adjust port if your Vite uses a different one
+        'http://127.0.0.1:5173',
+    ]
+else:
+    # Production: Get allowed origins from environment variable
+    CORS_ALLOWED_ORIGINS_STRING = os.environ.get('CORS_ALLOWED_ORIGINS')
+    if CORS_ALLOWED_ORIGINS_STRING:
+        CORS_ALLOWED_ORIGINS = CORS_ALLOWED_ORIGINS_STRING.split(',')
+    else:
+        CORS_ALLOWED_ORIGINS = [] # Or set specific defaults if needed
 
-# Optional: Allow specific headers if needed (often default is fine)
-# CORS_ALLOW_HEADERS = [ ... ]
 
-# Optional: Allow specific methods (often default is fine)
-# CORS_ALLOW_METHODS = [ ... ]
+STATIC_URL = 'static/'
+# Add this for WhiteNoise if serving static files from Django/Gunicorn
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles') 
+# Optional: Add directories searched by collectstatic
+# STATICFILES_DIRS = [os.path.join(BASE_DIR, 'static')] 
 
-
-# Internationalization & Static files (default settings usually fine for API)
-# ... (keep default LANGUAGE_CODE, TIME_ZONE, USE_I18N, USE_TZ)
-# ... (keep default STATIC_URL, STATIC_ROOT if needed)
+# Add this if using WhiteNoise for simplified static file serving on Render
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 # Default primary key field type
-# https://docs.djangoproject.com/en/4.0/ref/settings/#default-auto-field
+# https://docs.djangoproject.com/en/stable/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'

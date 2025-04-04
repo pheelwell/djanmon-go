@@ -32,6 +32,16 @@ Djanmongo is a web-based monster battling game built with a Django backend (usin
     *   API client (`axios`) with interceptors for auth headers and auto-logout on 401 errors.
 *   **Management Command:** `add_attacks` to populate/update attack data.
 
+## Screenshots
+
+**Main View / Moveset Management:**
+
+![Main View Screenshot](assets/images/main.png)
+
+**Battle View:**
+
+![Battle View Screenshot](assets/images/battle.png)
+
 ## Tech Stack
 
 *   **Backend:** Python, Django, Django Rest Framework
