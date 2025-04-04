@@ -12,6 +12,6 @@ import os
 from django.core.wsgi import get_wsgi_application
 
 # Make sure this matches the path used in your manage.py and settings.py
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'pokemon_like_project.settings')
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'settings')
 
 application = get_wsgi_application()
