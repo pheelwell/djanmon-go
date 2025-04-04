@@ -1,0 +1,109 @@
+@import './base.css';
+
+body {
+  color: var(--color-text);
+  background: var(--color-background);
+  transition: color 0.5s,
+    background-color 0.5s;
+  line-height: 1.6;
+  font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu,
+    Cantarell, 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+  font-size: 16px; /* Increased base font size slightly */
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#app {
+  max-width: 1280px;
+  margin: 0 auto;
+  /* Removed default padding, can be added back if needed */
+  /* padding: 2rem; */
+  font-weight: normal;
+  /* Ensure app takes full height */
+  min-height: 100vh; 
+  display: flex; /* Use flexbox for layout */
+  flex-direction: column; /* Stack header/content vertically */
+}
+
+/* Let RouterView take remaining height */
+.router-view-container { /* Add a wrapper if needed, or apply to RouterView directly if possible */
+  flex-grow: 1; 
+}
+
+a,
+.green {
+  text-decoration: none;
+  color: var(--color-heading); /* Use heading color for links */
+  transition: 0.4s;
+  /* padding: 3px; */ /* Remove padding */
+}
+
+@media (hover: hover) {
+  a:hover {
+    /* background-color: hsla(160, 100%, 37%, 0.2); */ /* Remove default hover background */
+    color: var(--vt-c-green); /* Use a specific green for hover */
+  }
+}
+
+/* Remove media query styling specific to the old two-column layout */
+/* @media (min-width: 1024px) {
+  body {
+    display: flex;
+    place-items: center;
+  }
+
+  #app {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    padding: 0 2rem;
+  }
+} */
+
+/* --- Basic Form Styling (can be expanded) --- */
+input,
+textarea,
+button,
+select {
+  font: inherit;
+  margin: 0;
+  padding: 0.5rem;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  background-color: var(--color-background-mute);
+  color: var(--color-text);
+}
+
+input:focus,
+textarea:focus,
+button:focus,
+select:focus {
+  outline: 1px solid var(--vt-c-green);
+  border-color: var(--vt-c-green);
+}
+
+button {
+  cursor: pointer;
+  background-color: var(--vt-c-green);
+  color: var(--vt-c-white);
+  border: none;
+  padding: 0.75rem 1.5rem;
+  transition: background-color 0.3s, opacity 0.3s;
+}
+
+button:hover {
+  background-color: var(--vt-c-green-dark);
+}
+
+button:disabled {
+  background-color: var(--color-border);
+  color: var(--color-text-mute);
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+/* Add some global margin/padding helpers if desired */
+.mb-1 { margin-bottom: 0.5rem; }
+.mb-2 { margin-bottom: 1rem; }
+.mt-1 { margin-top: 0.5rem; }
+.mt-2 { margin-top: 1rem; }

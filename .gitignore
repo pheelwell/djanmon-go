@@ -1,0 +1,42 @@
+# Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Python Virtual environment
+.venv/
+venv/
+env/
+*.env
+
+# Django
+db.sqlite3
+db.sqlite3-journal
+*.log
+local_settings.py
+
+# Frontend (Node/Vite)
+frontend/node_modules/
+frontend/dist/
+frontend/.pnp*
+frontend/.env*
+frontend/coverage/
+frontend/*.log*
+frontend/npm-debug.log*
+frontend/yarn-debug.log*
+frontend/yarn-error.log*
+frontend/package-lock.json # If using npm instead of yarn or pnpm
+frontend/yarn.lock         # If using npm instead of yarn
+
+# Editor directories and files
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# OS generated files
+.DS_Store
+Thumbs.db 
