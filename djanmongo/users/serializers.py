@@ -5,6 +5,8 @@ from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
 
 from .models import User
+# Import AttackSerializer locally where needed to avoid potential circular imports at module level
+# from game.serializers import AttackSerializer 
 
 class UserRegisterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=True, validators=[validate_password])
@@ -82,4 +84,64 @@ class UserSerializer(serializers.ModelSerializer):
         # Moved import inside method
         from game.serializers import AttackSerializer
         attacks_queryset = user_instance.selected_attacks.all()
+        return AttackSerializer(attacks_queryset, many=True, read_only=True).data
+
+# --- NEW: Leaderboard Serializers ---
+
+class UserStatsSerializer(serializers.ModelSerializer):
+    """Serializer for the current user's detailed stats."""
+    total_wins = serializers.SerializerMethodField()
+    total_losses = serializers.SerializerMethodField()
+    total_rounds_played = serializers.SerializerMethodField()
+    nemesis = serializers.SerializerMethodField()
+    # Note: Attack usage stats are deferred
+
+    class Meta:
+        model = User
+        fields = (
+            'username', # Or include other base User fields if needed
+            'total_wins', 
+            'total_losses', 
+            'total_rounds_played', 
+            'nemesis',
+        )
+
+    def get_total_wins(self, user_instance):
+        return user_instance.get_total_wins()
+
+    def get_total_losses(self, user_instance):
+        return user_instance.get_total_losses()
+
+    def get_total_rounds_played(self, user_instance):
+        return user_instance.get_total_rounds_played()
+
+    def get_nemesis(self, user_instance):
+        # The model method already returns a dict or None
+        return user_instance.get_nemesis()
+
+
+class LeaderboardUserSerializer(serializers.ModelSerializer):
+    """Serializer for displaying users on the public leaderboard."""
+    total_wins = serializers.SerializerMethodField()
+    selected_attacks = serializers.SerializerMethodField(read_only=True) # User's current loadout
+
+    class Meta:
+        model = User
+        fields = (
+            'id', 
+            'username', 
+            'level', 
+            'total_wins', 
+            'selected_attacks',
+        )
+
+    def get_total_wins(self, user_instance):
+        # Reuse the method from the User model
+        return user_instance.get_total_wins()
+
+    def get_selected_attacks(self, user_instance):
+        # Reuse logic similar to UserSerializer or import AttackSerializer
+        from game.serializers import AttackSerializer
+        attacks_queryset = user_instance.selected_attacks.all()
+        # Limit the number of attacks shown in the leaderboard view if desired, e.g., [:4]
         return AttackSerializer(attacks_queryset, many=True, read_only=True).data

@@ -1,6 +1,8 @@
 from django.contrib.auth.models import AbstractUser
 from django.db import models
 from django.core.validators import MaxValueValidator
+from django.db.models import Q, Count
+from django.db import models as db_models
 
 # Import Attack model safely for relationship definition
 from game.models import Attack
@@ -30,6 +32,78 @@ class User(AbstractUser):
 
     def __str__(self):
         return f"{self.username} (Lvl {self.level})"
+
+    # --- Leaderboard Stats ---
+
+    def get_total_wins(self):
+        """Counts the number of finished battles this user has won."""
+        # Ensure we import Battle model locally to avoid potential circular imports at module level
+        from game.models import Battle 
+        return Battle.objects.filter(winner=self, status='finished').count()
+
+    def get_total_losses(self):
+        """Counts the number of finished battles this user has lost."""
+        from game.models import Battle
+        # Battles where the user participated but was not the winner, and the battle is finished
+        return Battle.objects.filter(
+            Q(player1=self) | Q(player2=self), 
+            status='finished'
+        ).exclude(winner=self).count()
+
+    def get_total_rounds_played(self):
+        """Counts the total number of finished battles this user participated in."""
+        from game.models import Battle
+        return Battle.objects.filter(
+            Q(player1=self) | Q(player2=self), 
+            status='finished'
+        ).count()
+
+    def get_nemesis(self):
+        """Finds the opponent the user has lost to the most."""
+        from game.models import Battle
+        
+        # Find all finished battles the user lost
+        lost_battles = Battle.objects.filter(
+            Q(player1=self) | Q(player2=self), 
+            status='finished'
+        ).exclude(winner=self)
+
+        # Determine the opponent in each lost battle
+        opponent_ids = []
+        for battle in lost_battles:
+            if battle.player1 == self:
+                opponent_ids.append(battle.player2_id)
+            else:
+                opponent_ids.append(battle.player1_id)
+        
+        if not opponent_ids:
+            return None # No losses, no nemesis
+
+        # Count losses against each opponent ID
+        loss_counts = {}
+        for opp_id in opponent_ids:
+            loss_counts[opp_id] = loss_counts.get(opp_id, 0) + 1
+        
+        # Find the opponent ID with the maximum losses
+        if not loss_counts:
+             return None
+             
+        nemesis_id = max(loss_counts, key=loss_counts.get)
+        
+        # Get the User object for the nemesis
+        try:
+            # Use the base manager to avoid any default filtering
+            nemesis_user = User._default_manager.get(pk=nemesis_id) 
+            return {
+                "username": nemesis_user.username,
+                "losses_against": loss_counts[nemesis_id]
+            }
+        except User.DoesNotExist:
+            return None # Should not happen if data is consistent
+
+    # Note: get_attack_usage_stats() requires more complex tracking, 
+    # potentially a new model linking battles, users, attacks used, and outcomes.
+    # We'll defer this specific feature for now.
 
     # Add methods here if needed, e.g., for calculating max HP based on level
     # def get_max_hp(self):

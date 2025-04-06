@@ -11,5 +11,7 @@ urlpatterns = [
     path('login/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('me/', views.UserProfileView.as_view(), name='user_profile'),
     path('me/selected-attacks/', views.UserSelectedAttacksUpdateView.as_view(), name='user_update_selected_attacks'),
+    path('me/stats/', views.UserStatsView.as_view(), name='user_stats'),
     path('', views.UserListView.as_view(), name='user_list'), # List users for potential battles
+    path('leaderboard/', views.LeaderboardView.as_view(), name='leaderboard'),
 ]

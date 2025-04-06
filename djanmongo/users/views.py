@@ -4,36 +4,67 @@ from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 
 from .models import User
-from .serializers import UserRegisterSerializer, UserProfileSerializer, BasicUserSerializer, UserSerializer
+from .serializers import UserRegisterSerializer, UserProfileSerializer, BasicUserSerializer, UserSerializer, UserStatsSerializer, LeaderboardUserSerializer
 from game.models import Attack # Import Attack model
 
 class RegisterView(generics.CreateAPIView):
+    """Handles user registration.
+
+    Allows any user to create a new account via a POST request.
+    Uses the `UserRegisterSerializer` for validation and creation.
+    Endpoint: `/api/users/register/` (typically)
+    """
     queryset = User.objects.all()
     permission_classes = (permissions.AllowAny,)
     serializer_class = UserRegisterSerializer
 
 class UserProfileView(generics.RetrieveAPIView):
+    """Retrieves the profile of the currently authenticated user.
+    
+    Responds to GET requests with the logged-in user's data,
+    serialized using `UserSerializer`.
+    Requires authentication.
+    Endpoint: `/api/users/profile/` (typically)
+    """
     permission_classes = (permissions.IsAuthenticated,)
     serializer_class = UserSerializer
 
     def get_object(self):
+        """Returns the currently authenticated user."""
         return self.request.user # Return the logged-in user's profile
 
 class UserListView(generics.ListAPIView):
-    """Lists users available for battling (excluding self)."""
+    """Lists users available for battling (excluding the requester).
+    
+    Responds to GET requests with a list of users (excluding the one making
+    the request), serialized using `BasicUserSerializer`.
+    Used for populating opponent lists.
+    Requires authentication.
+    Endpoint: `/api/users/` (typically)
+    """
     permission_classes = (permissions.IsAuthenticated,)
     serializer_class = BasicUserSerializer # Use a simpler serializer for lists
 
     def get_queryset(self):
+        """Returns a queryset of all users excluding the requesting user."""
         # Exclude the requesting user from the list
         return User.objects.exclude(pk=self.request.user.pk).order_by('username')
 
 # --- Add UserSelectedAttacksUpdateView ---
 class UserSelectedAttacksUpdateView(APIView):
+    """Updates the selected attacks for the authenticated user.
+
+    Handles PUT requests to update the `selected_attacks` ManyToMany field.
+    Expects data in the format: `{"attack_ids": [id1, id2, ...]}`.
+    Validates that the user knows the attacks and the list has <= 6 IDs.
+    Requires authentication.
+    Endpoint: `/api/users/profile/selected-attacks/` (typically)
+    """
     permission_classes = [IsAuthenticated]
     serializer_class = UserSerializer # Use UserSerializer for response
 
     def put(self, request, *args, **kwargs):
+        """Handles the PUT request to update selected attacks."""
         user = request.user
         print(f"--- DEBUG: Received data for user {user.username}: {request.data} (Type: {type(request.data)}) ---")
         
@@ -92,3 +123,48 @@ class UserSelectedAttacksUpdateView(APIView):
         # Return the updated user profile
         serializer = self.serializer_class(user, context={'request': request})
         return Response(serializer.data)
+
+# --- NEW: Leaderboard Views ---
+
+class UserStatsView(generics.RetrieveAPIView):
+    """Retrieves detailed battle statistics for the logged-in user.
+
+    Responds to GET requests with the user's win/loss record, nemesis, etc.,
+    serialized using `UserStatsSerializer`.
+    Requires authentication.
+    Endpoint: `/api/users/profile/stats/` (typically)
+    """
+    permission_classes = (permissions.IsAuthenticated,)
+    serializer_class = UserStatsSerializer
+
+    def get_object(self):
+        """Returns the currently authenticated user."""
+        # The object is the requesting user
+        return self.request.user
+
+class LeaderboardView(generics.ListAPIView):
+    """Provides a public leaderboard of users.
+
+    Responds to GET requests with a list of all users, serialized using
+    `LeaderboardUserSerializer` (includes username, level, wins, selected attacks).
+    Currently fetches all users; sorting/ranking logic might be handled client-side
+    or refined here later if needed.
+    Allows any user (no authentication required).
+    Endpoint: `/api/leaderboard/` (typically)
+    """
+    # Allow any user (authenticated or not) to view the leaderboard
+    permission_classes = (permissions.AllowAny,)
+    serializer_class = LeaderboardUserSerializer
+
+    def get_queryset(self):
+        # Fetch all users, annotate with win counts, and order by wins descending
+        # Note: Annotating directly might be more efficient for large user bases
+        # than relying solely on the serializer method field if sorting is needed.
+        # However, for simplicity and consistency with the serializer, we'll 
+        # fetch all users and let the frontend sort or paginate if needed.
+        # If performance becomes an issue, revisit this with annotation.
+        # queryset = User.objects.annotate(win_count=Count('won_battles')).order_by('-win_count', 'username')
+        
+        # Simpler approach: Get all users, rely on serializer methods for stats.
+        # Frontend will handle sorting/display.
+        return User.objects.all().order_by('username') # Default order, can be overridden

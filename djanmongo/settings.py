@@ -2,6 +2,10 @@ import os
 import dj_database_url
 from pathlib import Path
 from datetime import timedelta # Import timedelta
+from os.path import join # <-- Add this
+
+# Import config helper from djangoeditorwidgets
+from djangoeditorwidgets.config import init_web_editor_config # <-- Add this
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -41,15 +45,16 @@ INSTALLED_APPS = [
     'rest_framework',
     'rest_framework_simplejwt',
     'corsheaders',
+    'djangoeditorwidgets', # <-- Add this
 
     # Your apps
     'users.apps.UsersConfig',
     'game.apps.GameConfig',
 ]
 MIDDLEWARE = [
-    'corsheaders.middleware.CorsMiddleware', # ADD this line (high up, usually before CommonMiddleware)
+    'corsheaders.middleware.CorsMiddleware', 
     'django.middleware.security.SecurityMiddleware',
-    'whitenoise.middleware.WhiteNoiseMiddleware', # Add WhiteNoise if serving static files via Django/Gunicorn
+    'whitenoise.middleware.WhiteNoiseMiddleware', 
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -165,6 +170,7 @@ if DEBUG:
 else:
     # Production: Get allowed origins from environment variable
     CORS_ALLOWED_ORIGINS_STRING = os.environ.get('CORS_ALLOWED_ORIGINS')
+    print(f"Allowed origins:{CORS_ALLOWED_ORIGINS}")
     if CORS_ALLOWED_ORIGINS_STRING:
         CORS_ALLOWED_ORIGINS = CORS_ALLOWED_ORIGINS_STRING.split(',')
     else:
@@ -175,7 +181,9 @@ STATIC_URL = 'static/'
 # Add this for WhiteNoise if serving static files from Django/Gunicorn
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles') 
 # Optional: Add directories searched by collectstatic
-# STATICFILES_DIRS = [os.path.join(BASE_DIR, 'static')] 
+STATICFILES_DIRS = [
+    os.path.join(BASE_DIR, 'static_cdn'), # <-- Add directory for downloaded editors
+]
 
 # Add this if using WhiteNoise for simplified static file serving on Render
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
@@ -184,3 +192,38 @@ STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 # https://docs.djangoproject.com/en/stable/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# --- Django Editor Widgets Config --- 
+# Use helper for DOWNLOAD path definition
+WEB_EDITOR_DOWNLOAD, _ = init_web_editor_config(
+    BASE_DIR / "static_cdn", 
+    STATIC_URL
+)
+
+# Manually define WEB_EDITOR_CONFIG to avoid double static prefix
+# Paths should be relative to the STATIC_URL root
+WEB_EDITOR_CONFIG = {
+    "tinymce": { # Keep definition even if not used, might be needed by package
+        "js": [
+            "tinymce/tinymce.min.js",
+            "djangoeditorwidgets/tinymce/tinymce.config.js",
+            "djangoeditorwidgets/tinymce/tinymce.init.js",
+        ],
+        "css": {
+            "all": [
+                "djangoeditorwidgets/tinymce/tinymce.custom.css",
+            ]
+        },
+    },
+    "monaco": {
+        "js": [
+            "monaco/vs/loader.js", # Path relative to static root
+            "djangoeditorwidgets/monaco/monaco.config.js",
+        ],
+        "css": {
+            "all": [
+                "djangoeditorwidgets/monaco/monaco.custom.css",
+            ]
+        },
+    },
+}

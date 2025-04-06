@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from .models import Attack, Battle
 from users.serializers import UserSerializer, BasicUserSerializer
-from .battle_logic import calculate_momentum_gain_range
+from .logic import calculate_momentum_gain_range
 
 class AttackSerializer(serializers.ModelSerializer):
     class Meta:

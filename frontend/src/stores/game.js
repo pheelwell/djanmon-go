@@ -2,6 +2,7 @@ import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import apiClient from '@/services/api';
 import { useAuthStore } from './auth'; // To access user info if needed
+import { fetchMyStats as apiFetchMyStats, fetchLeaderboard as apiFetchLeaderboard } from '@/services/api';
 
 export const useGameStore = defineStore('game', () => {
   // --- State --- 
@@ -17,6 +18,13 @@ export const useGameStore = defineStore('game', () => {
   const battleMessage = ref(null); // Specific message for battle updates
   const turnSummary = ref([]); // Store turn summary messages
   const isConceding = ref(false); // Added state for concede loading
+
+  // NEW: Leaderboard State
+  const myStats = ref(null);
+  const leaderboardData = ref([]);
+  const isLoadingMyStats = ref(false);
+  const isLoadingLeaderboard = ref(false);
+  const leaderboardError = ref(null);
 
   // --- Actions --- 
 
@@ -222,6 +230,44 @@ export const useGameStore = defineStore('game', () => {
       }
   }
 
+  // --- NEW: Leaderboard Actions ---
+
+  async function fetchMyStats() {
+    isLoadingMyStats.value = true;
+    leaderboardError.value = null;
+    try {
+      const response = await apiFetchMyStats(); // Use imported function
+      myStats.value = response.data;
+    } catch (error) {
+      console.error('Failed to fetch user stats:', error.response?.data || error.message);
+      leaderboardError.value = 'Could not load your stats.';
+      myStats.value = null;
+    } finally {
+      isLoadingMyStats.value = false;
+    }
+  }
+
+  async function fetchLeaderboard() {
+    isLoadingLeaderboard.value = true;
+    leaderboardError.value = null;
+    try {
+      const response = await apiFetchLeaderboard(); // Use imported function
+      // Sort leaderboard by wins descending, then username ascending
+      leaderboardData.value = response.data.sort((a, b) => {
+        if (b.total_wins !== a.total_wins) {
+            return b.total_wins - a.total_wins; // Higher wins first
+        }
+        return a.username.localeCompare(b.username); // Then alphabetical
+      });
+    } catch (error) {
+      console.error('Failed to fetch leaderboard:', error.response?.data || error.message);
+      leaderboardError.value = 'Could not load leaderboard.';
+      leaderboardData.value = [];
+    } finally {
+      isLoadingLeaderboard.value = false;
+    }
+  }
+
   // --- Helpers --- 
   function clearMessages() {
       actionError.value = null;
@@ -246,6 +292,13 @@ export const useGameStore = defineStore('game', () => {
     turnSummary, // Battle turn summary
     isConceding, // Export loading state
 
+    // NEW: Leaderboard State Exports
+    myStats,
+    leaderboardData,
+    isLoadingMyStats,
+    isLoadingLeaderboard,
+    leaderboardError,
+
     // Actions
     fetchUsers,
     fetchPendingBattles,
@@ -256,5 +309,9 @@ export const useGameStore = defineStore('game', () => {
     fetchBattleById, // Added action
     concedeBattle, // Export new action
     clearMessages,
+
+    // NEW: Leaderboard Actions Exports
+    fetchMyStats, // New action
+    fetchLeaderboard, // New action
   };
 }); 

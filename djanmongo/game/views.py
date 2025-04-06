@@ -180,7 +180,8 @@ class BattleActionView(views.APIView):
 
             # --- Respond with updated battle state ---
             # The battle object is modified and saved within apply_attack
-            updated_battle_state = BattleSerializer(battle).data
+            # Pass request context to the serializer
+            updated_battle_state = BattleSerializer(battle, context={'request': request}).data
 
             if battle_ended:
                 return Response({

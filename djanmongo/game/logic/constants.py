@@ -1,0 +1,11 @@
+# djanmongo/game/logic/constants.py
+
+# Battle Mechanics
+MAX_STAT_STAGE = 6
+MIN_STAT_STAGE = -6
+DAMAGE_RANDOM_FACTOR_MIN = 0.85
+DAMAGE_RANDOM_FACTOR_MAX = 1.00
+
+# Momentum Mechanics
+BASELINE_SPEED_FOR_MOMENTUM = 5 
+MOMENTUM_UNCERTAINTY_MIN_FACTOR = 0.25 
