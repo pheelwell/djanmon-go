@@ -19,6 +19,7 @@ const displayEmoji = computed(() => props.attack.emoji || '⚔️');
     <!-- Top Right Cost Display -->
     <div v-if="attack.momentum_cost > 0" class="cost-display">
         <span class="energy-symbol">⚡️</span>
+        <!-- Displaying the base cost, actual cost varies -->
         <span class="cost-value">{{ attack.momentum_cost }}</span>
     </div>
 

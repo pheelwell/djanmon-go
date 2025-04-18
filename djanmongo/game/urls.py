@@ -13,4 +13,7 @@ urlpatterns = [
     path('battles/<int:pk>/action/', views.BattleActionView.as_view(), name='battle_action'),
     path('battles/<int:pk>/concede/', views.ConcedeBattleView.as_view(), name='battle_concede'),
     path('battles/active/', views.ActiveBattleView.as_view(), name='active_battle'), # Get user's current active battle
+    # NEW: Attack Generation Endpoint
+    path('attacks/generate/', views.GenerateAttacksView.as_view(), name='attack_generate'),
+    path('attacks/my-attacks/', views.MyAttacksListView.as_view(), name='my_attacks_list'),
 ]

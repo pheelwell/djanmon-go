@@ -3,6 +3,7 @@ from django.db import models
 from django.core.validators import MaxValueValidator
 from django.db.models import Q, Count
 from django.db import models as db_models
+from django.utils import timezone # Added for default value
 
 # Import Attack model safely for relationship definition
 from game.models import Attack
@@ -15,6 +16,12 @@ class User(AbstractUser):
     attack = models.IntegerField(default=5)
     defense = models.IntegerField(default=5)
     speed = models.IntegerField(default=5)
+
+    # NEW: Currency for boosters
+    booster_credits = models.PositiveIntegerField(default=0, help_text="Currency earned from battles to open boosters.")
+
+    # NEW: Track user activity
+    last_seen = models.DateTimeField(default=timezone.now, help_text="Last time the user made an authenticated request.")
 
     # Relationships
     # All attacks the user has learned

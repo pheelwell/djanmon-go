@@ -1,12 +1,14 @@
 from rest_framework import serializers
 from .models import Attack, Battle
 from users.serializers import UserSerializer, BasicUserSerializer
-from .logic import calculate_momentum_gain_range
+from .logic import calculate_momentum_cost_range
 
 class AttackSerializer(serializers.ModelSerializer):
     class Meta:
         model = Attack
-        fields = ('id', 'name', 'description', 'power', 'target', 'hp_amount', 'target_stat', 'stat_mod', 'emoji', 'momentum_cost')
+        fields = (
+            'id', 'name', 'description', 'emoji', 'momentum_cost',
+        )
 
 # --- Battle Serializers ---
 
@@ -32,6 +34,7 @@ class BattleSerializer(serializers.ModelSerializer):
             'id', 'player1', 'player2', 'status', 'winner',
             'current_hp_player1', 'current_hp_player2',
             'stat_stages_player1', 'stat_stages_player2',
+            'custom_statuses_player1', 'custom_statuses_player2',
             'last_turn_summary',
             'current_momentum_player1', 'current_momentum_player2', 'whose_turn',
             'my_selected_attacks',
@@ -41,8 +44,8 @@ class BattleSerializer(serializers.ModelSerializer):
         
     def get_my_selected_attacks(self, battle_instance):
         """ 
-        Returns a list of the requesting user's selected attacks.
-        Includes calculated min/max momentum gain *only* if it's the user's turn.
+        Returns a list of the requesting user's selected attacks *specific to this battle*.
+        Includes calculated min/max momentum COST *only* if it's the user's turn.
         """
         requesting_user = self.context.get('request').user
         if not requesting_user:
@@ -52,24 +55,43 @@ class BattleSerializer(serializers.ModelSerializer):
         if not user_role:
              return [] # User is not part of this battle
 
-        # Get the user's selected attacks
-        my_attacks = requesting_user.selected_attacks.all()
+        # --- MODIFIED: Get attacks from battle-specific fields --- 
+        if user_role == 'player1':
+            my_attacks = battle_instance.battle_attacks_player1.all()
+            actor_stages = battle_instance.stat_stages_player1
+        else: # user_role == 'player2'
+            my_attacks = battle_instance.battle_attacks_player2.all()
+            actor_stages = battle_instance.stat_stages_player2
+        # --- END MODIFICATION --- 
 
         # Determine if it's the user's turn to calculate gains
         is_my_turn = battle_instance.whose_turn == user_role
-        actor_stages = battle_instance.stat_stages_player1 if user_role == 'player1' else battle_instance.stat_stages_player2
 
         serialized_attacks = []
         attack_serializer = AttackSerializer() # Instantiate once
         
         for attack in my_attacks:
             serialized_attack = attack_serializer.to_representation(attack)
-            # Only calculate and add gain range if it is the user's turn
+            # Only calculate and add cost range if it is the user's turn
             if is_my_turn:
-                min_gain, max_gain = calculate_momentum_gain_range(attack, requesting_user, actor_stages)
-                serialized_attack['calculated_min_gain'] = min_gain
-                serialized_attack['calculated_max_gain'] = max_gain
-            # else: min/max gain fields will be absent
+                # Construct base stats dict from the user object
+                attacker_base_stats = {
+                    'hp': requesting_user.hp,
+                    'attack': requesting_user.attack,
+                    'defense': requesting_user.defense,
+                    'speed': requesting_user.speed
+                }
+                # Use the renamed cost calculation function
+                # Pass the base cost, the stats dict, and the stages dict
+                min_cost, max_cost = calculate_momentum_cost_range(
+                    attack.momentum_cost, 
+                    attacker_base_stats, 
+                    actor_stages
+                )
+                # Rename the fields
+                serialized_attack['calculated_min_cost'] = min_cost
+                serialized_attack['calculated_max_cost'] = max_cost
+            # else: min/max cost fields will be absent
             serialized_attacks.append(serialized_attack)
             
         return serialized_attacks
@@ -82,3 +104,14 @@ class BattleListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Battle
         fields = ('id', 'player1', 'player2', 'status', 'created_at')
+
+# --- Attack Generation Serializer ---
+class GenerateAttackRequestSerializer(serializers.Serializer):
+    concept = serializers.CharField(max_length=50, required=True, help_text="Short concept (max 50 chars) to guide attack generation.")
+    favorite_attack_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        required=False,
+        allow_empty=True,
+        max_length=6,
+        help_text="Optional list of up to 6 favorite attack IDs to influence generation."
+    )

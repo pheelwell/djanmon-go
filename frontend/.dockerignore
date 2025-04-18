@@ -1,0 +1,34 @@
+# Frontend .dockerignore
+
+# Node modules
+node_modules
+
+# Build output
+dist
+dist-ssr
+
+# Log files
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Editor directories and files
+.idea
+.vscode
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Optional lock files
+pnpm-lock.yaml
+
+# OS generated files
+.DS_Store
+Thumbs.db 

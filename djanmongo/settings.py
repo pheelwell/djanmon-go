@@ -20,7 +20,7 @@ SECRET_KEY = os.environ.get('SECRET_KEY', 'your-development-secret-key') # ADD t
 DEBUG = os.environ.get('DEBUG', 'True') == 'True' # MODIFY this line (or add if missing)
 
 # Get allowed hosts from env var, fallback for local dev
-ALLOWED_HOSTS_STRING = os.environ.get('DJANGO_ALLOWED_HOSTS', '127.0.0.1,localhost') # ADD or MODIFY this
+ALLOWED_HOSTS_STRING = os.environ.get('DJANGO_ALLOWED_HOSTS', '127.0.0.1,localhost,palmer-kentucky-geological-dc.trycloudflare.com, lexmark-specialists-leone-legislation.trycloudflare.com') # ADD or MODIFY this
 ALLOWED_HOSTS = ALLOWED_HOSTS_STRING.split(',') if ALLOWED_HOSTS_STRING else [] # MODIFY this line
 
 # Application definition
@@ -59,6 +59,7 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'middleware.update_last_seen.UpdateLastSeenMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
@@ -86,23 +87,30 @@ WSGI_APPLICATION = 'wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/4.0/ref/settings/#databases
 
-DATABASE_URL = os.environ.get('DATABASE_URL') # ADD this line
+DATABASE_URL = os.environ.get('DATABASE_URL')
 
 if DATABASE_URL:
-    # Production/Render environment: Use DATABASE_URL from environment
+    # Environment with DATABASE_URL (like Docker Compose, Render)
     DATABASES = {
         'default': dj_database_url.config(
             default=DATABASE_URL,
-            conn_max_age=600, # Recommended for persistent connections
-            ssl_require=True  # Render PostgreSQL requires SSL
+            conn_max_age=600, 
+            # Only require SSL if explicitly set in URL or production context
+            # ssl_require= not DEBUG # Example: Require SSL if not in DEBUG mode
+            # Render requires SSL, so keep it if deploying there
+            ssl_require=True if os.environ.get('RENDER') else False 
         )
     }
 else:
-    # Local development environment: Use SQLite
+    # Local development fallback (WITHOUT Docker Compose or without DATABASE_URL set)
     DATABASES = {
         'default': {
-            'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': BASE_DIR / 'db.sqlite3', # Assumes db.sqlite3 is in the parent dir of settings.py
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': 'djanmongo_dev',
+            'USER': 'djanmongo_user',
+            'PASSWORD': 'djanmongo_password',
+            'HOST': 'localhost', # Keep localhost for direct connection
+            'PORT': '5433',      # Keep the original local port
         }
     }
 
@@ -159,6 +167,9 @@ SIMPLE_JWT = {
     'SLIDING_TOKEN_REFRESH_LIFETIME': timedelta(days=1),
 }
 
+# Use environment variable for Gemini API Key, default to None if not set
+GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', None)
+
 # --- CORS Settings ---
 # Allow requests from the Vue development server
 if DEBUG:
@@ -192,6 +203,10 @@ STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 # https://docs.djangoproject.com/en/stable/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# Increase max number of POST/GET parameters to prevent TooManyFieldsSent error in admin
+# Default is 1000
+DATA_UPLOAD_MAX_NUMBER_FIELDS = 50000 
 
 # --- Django Editor Widgets Config --- 
 # Use helper for DOWNLOAD path definition
@@ -227,3 +242,10 @@ WEB_EDITOR_CONFIG = {
         },
     },
 }
+
+# --- Game Specific Settings ---
+BASE_STARTING_HP = 100 # Example value
+BASE_MOMENTUM = 0      # Default starting momentum
+
+# --- Lua Integration ---
+LUA_SCRIPT_PATH = BASE_DIR / 'game' / 'lua_scripts'

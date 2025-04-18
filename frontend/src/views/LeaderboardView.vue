@@ -3,7 +3,8 @@ import { ref, computed, onMounted } from 'vue';
 import { useGameStore } from '@/stores/game';
 import { useAuthStore } from '@/stores/auth'; // To check if user is logged in
 import { storeToRefs } from 'pinia';
-import AttackCard from '@/components/AttackCard.vue'; // Import the new component
+// import AttackCard from '@/components/AttackCard.vue'; // Import the new component
+import AttackCardDisplay from '@/components/AttackCardDisplay.vue'; // <-- Import this instead
 
 const gameStore = useGameStore();
 const authStore = useAuthStore();
@@ -54,6 +55,7 @@ const nemesisDisplay = computed(() => {
 
 // NEW: Hover handlers
 function handleMouseEnter(attack, event) {
+  console.log('Mouse Enter:', attack.name, event.target);
   hoveredAttack.value = attack;
   // Position card slightly below and to the right of the triggering element
   const rect = event.target.getBoundingClientRect();
@@ -63,10 +65,14 @@ function handleMouseEnter(attack, event) {
     opacity: 1,
     transform: 'translateY(0)'
   };
+  console.log('Hover Card Style:', hoverCardStyle.value);
 }
 
 function handleMouseLeave() {
+  console.log('Mouse Leave');
   hoveredAttack.value = null;
+  // We don't strictly need to reset style here as v-if removes the element,
+  // but keeping opacity/transform helps if we change to v-show
   hoverCardStyle.value = {
       ...hoverCardStyle.value, // Keep position but fade out
       opacity: 0,
@@ -139,12 +145,14 @@ function handleMouseLeave() {
       </div>
     </section>
 
-    <!-- Attack Card Popover -->
-    <AttackCard 
-        v-if="hoveredAttack" 
-        :attack="hoveredAttack" 
-        :style="hoverCardStyle" 
-    />
+    <!-- Attack Card Popover - Use AttackCardDisplay now -->
+    <div 
+      v-if="hoveredAttack" 
+      class="attack-hover-popup" 
+      :style="hoverCardStyle"
+    >
+      <AttackCardDisplay :attack="hoveredAttack" />
+    </div>
 
   </div>
 </template>
@@ -286,8 +294,29 @@ h1, h2 {
     background-color: var(--color-background-mute); /* Highlight on hover */
 }
 
-/* AttackCard styles are in AttackCard.vue */
-/* Ensure positioning works by adding styles to show/hide */
+/* NEW: Styles for the hover popup wrapper */
+.attack-hover-popup {
+  position: absolute;
+  background-color: var(--color-background);
+  border: 1px solid var(--color-border-hover);
+  border-radius: 8px;
+  padding: 0.8rem; /* Match wrapper padding */
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  z-index: 10; /* Ensure it's on top */
+  pointer-events: none; /* Prevent interaction with the popup */
+  opacity: 0; /* Hidden by default, controlled by style binding */
+  transition: opacity 0.2s ease-in-out, transform 0.2s ease-in-out;
+  transform: translateY(10px);
+  /* Set a min/max width if needed, or let content decide */
+  min-width: 140px; 
+  max-width: 200px; /* Example max width */
+  /* Set a fixed height to match other cards? */
+  height: 180px; /* Match AttackCreatorView */
+  display: flex; /* Ensure content inside centers if needed */
+  justify-content: center;
+  align-items: center;
+}
+
 /* REMOVED .attack-card styles from here */
 
 </style> 

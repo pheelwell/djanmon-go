@@ -38,6 +38,12 @@ const router = createRouter({
       component: () => import('../views/LeaderboardView.vue'),
       meta: { requiresAuth: false }
     },
+    {
+      path: '/attack-creator',
+      name: 'attack-creator',
+      component: () => import('../views/AttackCreatorView.vue'),
+      meta: { requiresAuth: true }
+    }
   ],
 })
 

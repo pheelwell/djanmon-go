@@ -1,5 +1,5 @@
 """
-WSGI config for pokemon_like_project project.
+WSGI config for djanmongo project.
 
 It exposes the WSGI callable as a module-level variable named ``application``.
 
@@ -8,10 +8,12 @@ https://docs.djangoproject.com/en/4.0/howto/deployment/wsgi/
 """
 
 import os
-
 from django.core.wsgi import get_wsgi_application
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Make sure this matches the path used in your manage.py and settings.py
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'settings')
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'djanmongo.settings')
 
 application = get_wsgi_application()

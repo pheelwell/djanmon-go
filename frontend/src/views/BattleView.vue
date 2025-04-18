@@ -3,12 +3,18 @@ import { ref, onMounted, onUnmounted, computed, watch, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useGameStore } from '@/stores/game';
 import { useAuthStore } from '@/stores/auth';
-import AttackCardDisplay from '@/components/AttackCardDisplay.vue'; // Import the new component
+import AttackCardDisplay from '@/components/AttackCardDisplay.vue';
+import AttackGrid from '@/components/AttackGrid.vue';
 
 const route = useRoute();
 const router = useRouter();
 const gameStore = useGameStore();
 const authStore = useAuthStore();
+
+// Define clamp locally
+function clamp(value, min, max) {
+  return Math.min(Math.max(value, min), max);
+}
 
 const battleId = computed(() => parseInt(route.params.id));
 const isLoading = ref(false);
@@ -16,7 +22,8 @@ const selectedAttackId = ref(null);
 const submittingAction = ref(false);
 const isConceding = computed(() => gameStore.isConceding);
 let pollingIntervalId = null;
-const POLLING_INTERVAL_MS = 1000; // Poll every 1 second now
+const POLLING_INTERVAL_MS = 1000;
+const MOMENTUM_THRESHOLD = 50; // Threshold for pendulum swing based on current turn momentum
 
 // --- Computed properties from Stores ---
 const battle = computed(() => gameStore.activeBattle);
@@ -52,7 +59,7 @@ const opponentCurrentHp = computed(() => {
     return userPlayerRole.value === 'player1' ? battle.value.current_hp_player2 : battle.value.current_hp_player1;
 });
 
-// Check if it's user's turn to act (UPDATED for momentum)
+// Check if it's user's turn to act
 const canAct = computed(() => {
     if (!battle.value || battle.value.status !== 'active' || !userPlayerRole.value) return false;
     // Check the whose_turn field directly
@@ -69,182 +76,184 @@ const userStatStages = computed(() => {
 
 const opponentStatStages = computed(() => {
     if (!userPlayerRole.value || !battle.value) return {};
-    // Get the role OPPOSITE to the user
-    const opponentRole = userPlayerRole.value === 'player1' ? 'player2' : 'player1'; 
+    const opponentRole = userPlayerRole.value === 'player1' ? 'player2' : 'player1';
     return battle.value[`stat_stages_${opponentRole}`];
 });
 
-// --- Momentum Bar Logic (Updated for Uncertainty Preview) ---
-const momentumPreview = ref(null); // { role: 'player1'/'player2', minCost: X, maxCost: Y }
+// --- Computed: Custom Statuses (Ensure these exist) ---
+const userCustomStatuses = computed(() => {
+    if (!userPlayerRole.value || !battle.value) return {};
+    // CORRECT: Get statuses directly from battle object based on role
+    const fieldName = `custom_statuses_${userPlayerRole.value}`;
+    return battle.value[fieldName] || {}; 
+});
 
+const opponentCustomStatuses = computed(() => {
+    if (!userPlayerRole.value || !battle.value) return {};
+    const opponentRole = userPlayerRole.value === 'player1' ? 'player2' : 'player1';
+    // CORRECT: Get statuses directly from battle object based on role
+    const fieldName = `custom_statuses_${opponentRole}`;
+    return battle.value[fieldName] || {};
+});
+
+// --- Momentum Calculation --- (REWORKED for Pendulum)
 const currentMomentumP1 = computed(() => battle.value?.current_momentum_player1 ?? 0);
 const currentMomentumP2 = computed(() => battle.value?.current_momentum_player2 ?? 0);
+const totalMomentum = computed(() => Math.max(1, currentMomentumP1.value + currentMomentumP2.value)); // Avoid division by zero
 
-const MOMENTUM_RESCALE_THRESHOLD = 100; // Rescale if min momentum > 100
+// Normalized value [0, 1] where 1 means P1 has all momentum
+const normalizedMomentumP1 = computed(() => currentMomentumP1.value / totalMomentum.value);
 
-// Calculate the offset for rescaling
-const rescaleOffset = computed(() => {
-  const p1 = currentMomentumP1.value;
-  const p2 = currentMomentumP2.value;
-  const minMomentum = Math.min(p1, p2);
-  if (minMomentum > MOMENTUM_RESCALE_THRESHOLD) {
-    return Math.max(0, minMomentum - MOMENTUM_RESCALE_THRESHOLD);
-  }
-  return 0;
+// Determine pendulum angle/position based on normalized value
+// Range: e.g., -90 degrees (all P2) to +90 degrees (all P1)
+const PENDULUM_MAX_ANGLE = 75; // Max tilt angle
+
+// Calculate angle based on the *current acting player's* momentum
+const pendulumAngle = computed(() => {
+    if (!battle.value || !battle.value.whose_turn) return 0;
+    
+    const turnRole = battle.value.whose_turn;
+    const currentMomentum = turnRole === 'player1' ? currentMomentumP1.value : currentMomentumP2.value;
+    
+    // Scale momentum more directly - let higher momentum swing further
+    // We might need a reference max momentum, but let's assume MOMENTUM_THRESHOLD represents the 'full swing' point for now.
+    // Allow swing beyond the threshold visually up to the max angle.
+    const scaledMomentum = currentMomentum / MOMENTUM_THRESHOLD; // Can exceed 1
+    const angleScale = clamp(scaledMomentum, 0, 1.5); // Allow some overswing visually, clamped at 1.5x threshold? Adjust as needed.
+
+    // Base angle: Positive if P1 turn, Negative if P2 turn
+    let angle = angleScale * PENDULUM_MAX_ANGLE * (turnRole === 'player1' ? 1 : -1);
+    // Clamp the final angle to the max physical swing
+    angle = clamp(angle, -PENDULUM_MAX_ANGLE, PENDULUM_MAX_ANGLE);
+
+    // Perspective inversion for viewer
+    if (userPlayerRole.value === 'player2') {
+        angle = -angle;
+    }
+    
+    return angle;
 });
 
-// Calculate the values used for the visual bar representation
-const visualMomentumP1 = computed(() => Math.max(0, currentMomentumP1.value - rescaleOffset.value));
-const visualMomentumP2 = computed(() => Math.max(0, currentMomentumP2.value - rescaleOffset.value));
+// Style object for the pendulum element
+const pendulumStyle = computed(() => ({
+  transform: `rotate(${pendulumAngle.value}deg)`
+}));
 
-// Calculate total visual momentum for percentage calculation
-const visualTotalMomentum = computed(() => Math.max(1, visualMomentumP1.value + visualMomentumP2.value));
-
-// Calculate P1's percentage based on visual values - USED FOR BAR FILL
-const visualP1Percent = computed(() => (visualMomentumP1.value / visualTotalMomentum.value) * 100);
-
-// Calculate PREVIEWED momentum based on MAX gain
-const previewedMaxMomentumP1 = computed(() => {
-    if (momentumPreview.value?.role === 'player1') {
-        return currentMomentumP1.value + momentumPreview.value.maxCost;
-    }
-    return currentMomentumP1.value;
-});
-const previewedMaxMomentumP2 = computed(() => {
-    if (momentumPreview.value?.role === 'player2') {
-        return currentMomentumP2.value + momentumPreview.value.maxCost;
-    }
-    return currentMomentumP2.value;
-});
-
-// Calculate PREVIEWED momentum based on MIN gain
-const previewedMinMomentumP1 = computed(() => {
-    if (momentumPreview.value?.role === 'player1') {
-        return currentMomentumP1.value + momentumPreview.value.minCost;
-    }
-    return currentMomentumP1.value;
-});
-const previewedMinMomentumP2 = computed(() => {
-    if (momentumPreview.value?.role === 'player2') {
-        return currentMomentumP2.value + momentumPreview.value.minCost;
-    }
-    return currentMomentumP2.value;
-});
-
-// Always calculate percentages relative to P1 for visual consistency of the bar itself
-const momentumTotalMax = computed(() => Math.max(1, previewedMaxMomentumP1.value + previewedMaxMomentumP2.value)); 
-const momentumP1PercentMax = computed(() => (previewedMaxMomentumP1.value / momentumTotalMax.value) * 100);
-
-// --- NEW: Computed properties for Preview positioning (perspective aware) ---
-const previewStyle = computed(() => {
-    if (!momentumPreview.value) return {}; // No preview active
-
-    const role = momentumPreview.value.role;
-    const minGain = momentumPreview.value.minCost;
-    const maxGain = momentumPreview.value.maxCost;
-    const currentP1 = currentMomentumP1.value;
-    const currentP2 = currentMomentumP2.value;
-
-    let previewMinP1, previewMaxP1, previewMinP2, previewMaxP2;
-
-    if (role === 'player1') {
-        previewMinP1 = currentP1 + minGain;
-        previewMaxP1 = currentP1 + maxGain;
-        previewMinP2 = currentP2;
-        previewMaxP2 = currentP2;
-    } else { // role === 'player2'
-        previewMinP1 = currentP1;
-        previewMaxP1 = currentP1;
-        previewMinP2 = currentP2 + minGain;
-        previewMaxP2 = currentP2 + maxGain;
-    }
-
-    // Calculate total momentum range for percentage calculation
-    const totalMinMomentum = Math.max(1, previewMinP1 + previewMinP2);
-    const totalMaxMomentum = Math.max(1, previewMaxP1 + previewMaxP2);
-
-    // Calculate the start and end percentages for P1's visual area
-    const previewStartPercent = (previewMinP1 / totalMinMomentum) * 100;
-    const previewEndPercent = (previewMaxP1 / totalMaxMomentum) * 100;
-
-    // These vars control the preview overlay position, always based on P1's area
-    return {
-        '--preview-start-percent': previewStartPercent + '%',
-        '--preview-end-percent': previewEndPercent + '%',
-    };
-});
-
-// Determine which side has momentum advantage (still based on P1 vs P2 absolute values)
-// --- UPDATED to return user/opponent advantage ---
-const momentumAdvantage = computed(() => {
-    const p1Momentum = currentMomentumP1.value;
-    const p2Momentum = currentMomentumP2.value;
-
-    if (p1Momentum === p2Momentum) return 'neutral';
-
-    const leadingRole = p1Momentum > p2Momentum ? 'player1' : 'player2';
-
-    if (leadingRole === userPlayerRole.value) {
-        return 'user-advantage';
-    } else {
-        return 'opponent-advantage';
-    }
+// Determine whose side the pendulum is leaning towards for styling
+const pendulumSide = computed(() => {
+    if (!battle.value || !battle.value.whose_turn) return 'center';
+    return battle.value.whose_turn === userPlayerRole.value ? 'user' : 'opponent';
 });
 
 // Available actions now come directly from the battle data
-const availableActions = computed(() => battle.value?.available_actions || []);
+const mySelectedAttacks = computed(() => {
+    // Filter attacks to only show those the user has enough momentum for?
+    // Or just display cost and let user try? Let's just display for now.
+    return battle.value?.my_selected_attacks || [];
+});
 
-// Update computed to use new field name
-const mySelectedAttacks = computed(() => battle.value?.my_selected_attacks || []);
+// --- Ghost Preview State ---
+const hoveredAttackCost = ref(null); // { min: X, max: Y }
+const ghostMinAngle = ref(0);
+const ghostMaxAngle = ref(0);
+const ghostMinMomentumValue = ref(0); // Momentum value for the player *after* min cost
+const ghostMaxMomentumValue = ref(0); // Momentum value for the player *after* max cost
+const ghostMinTurnSwitch = ref(false); // Will turn switch if min cost applied?
+const ghostMaxTurnSwitch = ref(false); // Will turn switch if max cost applied?
 
-// Hover handlers (Check if gain data exists)
-function previewAttackMomentum(action) { 
-    if (!canAct.value || !action) {
-        clearMomentumPreview(); // Clear if not actionable
+// Calculate ghost states when hovering
+function calculateGhostState(cost) {
+    const turnRole = userPlayerRole.value; // Calculate based on user trying the action
+    const currentMomentum = turnRole === 'player1' ? currentMomentumP1.value : currentMomentumP2.value;
+    const opponentRole = turnRole === 'player1' ? 'player2' : 'player1';
+    const opponentMomentum = opponentRole === 'player1' ? currentMomentumP1.value : currentMomentumP2.value;
+
+    let resultingMomentum, resultingOpponentMomentum, turnWillSwitch;
+    let nextTurnRole;
+
+    if (currentMomentum >= cost) {
+        resultingMomentum = currentMomentum - cost;
+        resultingOpponentMomentum = opponentMomentum;
+        turnWillSwitch = false;
+        nextTurnRole = turnRole; // Turn stays with current player
+    } else {
+        const overflow = cost - currentMomentum;
+        resultingMomentum = 0;
+        resultingOpponentMomentum = opponentMomentum + overflow;
+        turnWillSwitch = true;
+        nextTurnRole = opponentRole; // Turn switches to opponent
+    }
+
+    // Calculate angle based on the player whose turn it *would* be
+    const momentumForAngle = turnWillSwitch ? resultingOpponentMomentum : resultingMomentum;
+    const scaledMomentum = clamp(momentumForAngle / MOMENTUM_THRESHOLD, 0, 1.2);
+    let angleRaw = scaledMomentum * PENDULUM_MAX_ANGLE * (nextTurnRole === 'player1' ? 1 : -1);
+
+    // Apply perspective inversion
+    let finalAngle = (userPlayerRole.value === 'player2') ? -angleRaw : angleRaw;
+
+    return { 
+        angle: finalAngle,
+        resultingMomentum: turnWillSwitch ? resultingOpponentMomentum : resultingMomentum, // Momentum of player whose turn it becomes
+        turnSwitch: turnWillSwitch 
+    };
+}
+
+// Update hover state
+function previewAttackCost(action) { 
+    if (!canAct.value || !action || action.calculated_min_cost === undefined) {
+        clearAttackCostPreview();
         return;
     }
-    // Only show preview if gain data is present (meaning it's our turn)
-    if (action.calculated_min_gain !== undefined && action.calculated_max_gain !== undefined) {
-        momentumPreview.value = {
-            role: userPlayerRole.value,
-            minCost: action.calculated_min_gain,
-            maxCost: action.calculated_max_gain 
-        };
-    } else {
-        clearMomentumPreview(); // Clear if no gain data (not our turn)
-    }
+    
+    hoveredAttackCost.value = {
+        min: action.calculated_min_cost,
+        max: action.calculated_max_cost,
+        attackId: action.id // Store ID to match tooltip
+    };
+
+    // Calculate ghost states
+    const minState = calculateGhostState(hoveredAttackCost.value.min);
+    const maxState = calculateGhostState(hoveredAttackCost.value.max);
+
+    ghostMinAngle.value = minState.angle;
+    ghostMinMomentumValue.value = minState.resultingMomentum;
+    ghostMinTurnSwitch.value = minState.turnSwitch;
+
+    ghostMaxAngle.value = maxState.angle;
+    ghostMaxMomentumValue.value = maxState.resultingMomentum;
+    ghostMaxTurnSwitch.value = maxState.turnSwitch;
 }
-function clearMomentumPreview() {
-    momentumPreview.value = null;
+
+function clearAttackCostPreview() {
+    hoveredAttackCost.value = null;
 }
 
-const battleLogContainer = ref(null); // Ref for the scrollable container
+// Helper computed styles for ghosts
+const ghostMinStyle = computed(() => ({ transform: `rotate(${ghostMinAngle.value}deg)` }));
+const ghostMaxStyle = computed(() => ({ transform: `rotate(${ghostMaxAngle.value}deg)` }));
 
-// NEW: Computed properties for displaying momentum difference
-const momentumDifference = computed(() => Math.abs(currentMomentumP1.value - currentMomentumP2.value));
+// Display value for main pendulum
+const currentTurnMomentum = computed(() => {
+     if (!battle.value || !battle.value.whose_turn) return 0;
+     return battle.value.whose_turn === 'player1' ? currentMomentumP1.value : currentMomentumP2.value;
+});
 
-const momentumDisplayP1 = computed(() => {
-    return currentMomentumP1.value > currentMomentumP2.value ? `+${momentumDifference.value}` : ' '; // Show difference or empty
-});
-const momentumDisplayP2 = computed(() => {
-    return currentMomentumP2.value > currentMomentumP1.value ? `+${momentumDifference.value}` : ' '; // Show difference or empty
-});
+// --- END Pendulum Logic ---
+
+const battleLogContainer = ref(null);
 
 // --- Methods ---
 async function fetchBattleData() {
     isLoading.value = true;
     try {
-        // Use fetchBattleById to ensure we have the correct battle data for this view
         await gameStore.fetchBattleById(battleId.value);
-        // Check if battle loaded successfully and matches the route ID
         if (!gameStore.activeBattle || gameStore.activeBattle.id !== battleId.value) {
             console.error('Failed to load correct battle data or battle ended.');
-            // Redirect if battle doesn't match or is finished/not found?
             // router.push({ name: 'home' });
         }
     } catch (error) {
         console.error('Error fetching battle data in view:', error);
-        // Error message is handled by the store's battleError
     } finally {
         isLoading.value = false;
     }
@@ -256,28 +265,22 @@ async function submitAction() {
     await gameStore.submitBattleAction(battle.value.id, selectedAttackId.value);
     selectedAttackId.value = null; // Reset selection after submitting
     submittingAction.value = false;
-    // Battle state updates will come via polling or the response
 }
 
 async function handleConcede() {
     if (confirm("Are you sure you want to concede the battle?")) {
        await gameStore.concedeBattle(battleId.value);
-       // Battle state should update via concedeBattle action setting final state
-       // Polling will stop automatically due to status change watcher
     }
 }
 
 function startPolling() {
-    if (pollingIntervalId) clearInterval(pollingIntervalId); // Clear existing if any
+    if (pollingIntervalId) clearInterval(pollingIntervalId); 
     console.log('Starting battle polling...');
     pollingIntervalId = setInterval(() => {
         if (battle.value && battle.value.status === 'active') {
              console.log('Polling for battle updates...');
-             // Use fetchBattleById to refresh the specific battle data
              gameStore.fetchBattleById(battleId.value).catch(err => {
                  console.error("Polling error:", err);
-                 // Stop polling if battle fetch fails repeatedly?
-                 // clearInterval(pollingIntervalId);
              });
         } else {
              console.log('Stopping polling, battle not active.');
@@ -306,9 +309,9 @@ function scrollLogToBottom() {
 }
 
 // Function to handle attack selection from card click
-function selectAttack(attack) {
+function selectAttack(attackId) {
     if (!submittingAction.value && canAct.value) {
-        selectedAttackId.value = attack.id;
+        selectedAttackId.value = attackId;
     }
 }
 
@@ -326,33 +329,70 @@ function getHpBarClass(currentHp, maxHp, playerType) {
 
 // --- Lifecycle Hooks ---
 onMounted(async () => {
-  await fetchBattleData(); // Initial fetch
-  // Start polling only if the battle is active after initial fetch
-  if (battle.value && battle.value.status === 'active') {
-      startPolling();
+  await fetchBattleData(); 
+  if (battle.value) {
+       scrollLogToBottom();
+       if (battle.value.status === 'active') {
+           startPolling();
+       }
   }
-  scrollLogToBottom(); // Scroll down on initial load
 });
 
 onUnmounted(() => {
-  stopPolling(); // Clean up interval
-  gameStore.clearMessages(); // Clear battle messages when leaving
+  stopPolling();
+  gameStore.clearMessages();
 });
 
-// Watch for changes in the summary length to scroll down
-watch(() => battle.value?.last_turn_summary?.length, (newLength, oldLength) => {
-  if (newLength > oldLength) { // Only scroll if new messages were added
+// --- Watchers ---
+watch(() => battle.value?.last_turn_summary, (newLog, oldLog) => {
     scrollLogToBottom();
-  }
-});
+}, { deep: true }); 
 
-// Watch for status changes
 watch(() => battle.value?.status, (newStatus) => {
     if (newStatus === 'finished' || newStatus === 'declined') {
         stopPolling();
-        scrollLogToBottom(); // Scroll down to see final message
+        scrollLogToBottom(); 
     }
 });
+
+// --- Formatting Helpers ---
+function formatStage(stage) {
+  return stage > 0 ? `+${stage}` : `${stage}`;
+}
+function getStatClass(stage) {
+  if (stage > 0) return 'stat-up';
+  if (stage < 0) return 'stat-down';
+  return '';
+}
+
+// --- NEW: Hashing and Color Generation for Statuses ---
+function stringToHashCode(str) {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash |= 0; // Convert to 32bit integer
+  }
+  return Math.abs(hash);
+}
+
+function getStatusColorStyle(statusName) {
+  const hash = stringToHashCode(statusName);
+  const hue = hash % 360; // Hue based on hash
+  const saturation = 60 + (hash % 21); // Saturation between 60-80%
+  const lightness = 45 + (hash % 11); // Lightness between 45-55%
+  
+  const backgroundColor = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+  // Simple contrast check: if lightness is high, use dark text, else light text
+  const textColor = lightness > 50 ? '#111' : '#fff'; 
+  
+  return {
+    backgroundColor: backgroundColor,
+    color: textColor,
+    borderColor: `hsl(${hue}, ${saturation}%, ${lightness - 15}%)` // Slightly darker border
+  };
+}
+// --- END NEW ---
 
 </script>
 
@@ -378,22 +418,33 @@ watch(() => battle.value?.status, (newStatus) => {
          </button>
       </div>
       
-      <!-- Player Info Display (Layout Updated) -->
+      <!-- Player Info Display (Unchanged) -->
       <div class="players-display">
           <!-- User Card -->
           <div class="player-card user">
               <h3>{{ userPlayer?.username }} (You)</h3>
-              <!-- Stat Badges Below Name -->
               <div class="stat-badges-container">
                   <span class="stat-badges"> 
                      <template v-for="(stage, stat) in userStatStages" :key="stat">
-                         <span v-if="stage !== 0" :class="['stat-badge', `badge-${stat}`]">
-                             {{ stat.toUpperCase() }} {{ stage > 0 ? '+' : '' }}{{ stage }}
+                         <span v-if="stage !== 0" :class="[
+                             'stat-badge',
+                             getStatClass(stage)
+                         ]">
+                             {{ stat.toUpperCase() }} {{ formatStage(stage) }}
+                         </span>
+                     </template>
+                  </span>
+                  <!-- Ensure Custom Statuses display exists -->
+                  <span class="custom-statuses"> 
+                     <template v-for="(value, name) in userCustomStatuses" :key="name">
+                         <span v-if="value" 
+                               class="custom-status-badge" 
+                               :style="getStatusColorStyle(name)">
+                             {{ name.replace(/_/g, ' ').toUpperCase() }} {{ typeof value === 'number' ? '(' + value + ')' : '' }} 
                          </span>
                      </template>
                   </span>
               </div>
-              <!-- HP Text and Bar on Same Line -->
               <div class="hp-display">
                  <p>HP: {{ userCurrentHp }} / {{ userPlayer?.hp }}</p>
                  <progress 
@@ -407,17 +458,28 @@ watch(() => battle.value?.status, (newStatus) => {
            <!-- Opponent Card -->
           <div class="player-card opponent">
                <h3>{{ opponentPlayer?.username }}</h3>
-               <!-- Stat Badges Below Name -->
                <div class="stat-badges-container">
                    <span class="stat-badges">
                         <template v-for="(stage, stat) in opponentStatStages" :key="stat">
-                           <span v-if="stage !== 0" :class="['stat-badge', `badge-${stat}`]">
-                               {{ stat.toUpperCase() }} {{ stage > 0 ? '+' : '' }}{{ stage }}
+                           <span v-if="stage !== 0" :class="[
+                               'stat-badge',
+                               getStatClass(stage)
+                           ]">
+                               {{ stat.toUpperCase() }} {{ formatStage(stage) }}
                            </span>
                        </template>
                    </span>
+                    <!-- Ensure Custom Statuses display exists -->
+                   <span class="custom-statuses"> 
+                      <template v-for="(value, name) in opponentCustomStatuses" :key="name">
+                          <span v-if="value" 
+                                class="custom-status-badge" 
+                                :style="getStatusColorStyle(name)">
+                              {{ name.replace(/_/g, ' ').toUpperCase() }} {{ typeof value === 'number' ? '(' + value + ')' : '' }} 
+                          </span>
+                      </template>
+                   </span>
                </div>
-                <!-- HP Text and Bar on Same Line -->
                <div class="hp-display">
                   <p>HP: {{ opponentCurrentHp }} / {{ opponentPlayer?.hp }}</p>
                   <progress 
@@ -429,117 +491,109 @@ watch(() => battle.value?.status, (newStatus) => {
           </div>
       </div>
 
-      <!-- Momentum Bar (Perspective Aware) -->
-      <div 
-          class="momentum-bar-container" 
-          :class="userPlayerRole === 'player2' ? 'perspective-player2' : 'perspective-player1'"
-      >
-          <div class="momentum-labels">
-              <!-- Labels might need conditional flipping too? Or leave as P1/P2 -->
-              <span class="label-p1">{{ momentumDisplayP1 }}</span>
-              <span class="label-title" :class="momentumAdvantage">Momentum</span> 
-              <span class="label-p2">{{ momentumDisplayP2 }}</span>
+      <!-- === UPDATED Pendulum Display === -->
+      <div class="momentum-pendulum-container">
+          <div class="pendulum-pivot"></div>
+          <!-- Dotted Center Line -->
+          <div class="pendulum-center-line"></div> 
+           <!-- Ghost Pendulum (Max Cost) -->
+           <div v-if="hoveredAttackCost" class="pendulum-arm ghost" :style="ghostMaxStyle" :class="ghostMaxTurnSwitch ? (pendulumSide === 'user' ? 'opponent' : 'user') : pendulumSide">
+              <div class="pendulum-weight ghost-weight">
+                 <span class="momentum-value">{{ Math.round(ghostMaxMomentumValue) }}</span>
+             </div>
           </div>
-          <div class="momentum-bar">
-              <!-- FILL uses VISUAL percentage -->
-              <div class="momentum-bar-fill" :style="{ width: visualP1Percent + '%' }"></div> 
-              <!-- Marker uses ABSOLUTE advantage -->
-              <div class="momentum-bar-marker" :class="momentumAdvantage"></div>
-              <!-- Preview Overlay uses ABSOLUTE calculations via previewStyle -->
-              <div 
-                 v-if="momentumPreview" 
-                 class="momentum-preview" 
-                 :class="momentumPreview.role"
-                 :style="previewStyle" 
-              ></div>
+          <!-- Ghost Pendulum (Min Cost) -->
+           <div v-if="hoveredAttackCost" class="pendulum-arm ghost" :style="ghostMinStyle" :class="ghostMinTurnSwitch ? (pendulumSide === 'user' ? 'opponent' : 'user') : pendulumSide">
+              <div class="pendulum-weight ghost-weight">
+                 <span class="momentum-value">{{ Math.round(ghostMinMomentumValue) }}</span>
+              </div>
+          </div>
+          <!-- Main Pendulum Arm -->
+          <div class="pendulum-arm" :style="pendulumStyle" :class="pendulumSide">
+              <div class="pendulum-weight">
+                  <span class="momentum-value">{{ Math.round(currentTurnMomentum) }}</span>
+              </div>
+          </div>
+          <div class="pendulum-base"></div>
+          <div class="pendulum-labels">
+             <span class="pendulum-label user-label">{{ userPlayer?.username }}</span>
+             <span class="pendulum-label opponent-label">{{ opponentPlayer?.username }}</span>
           </div>
       </div>
+      <!-- === End Pendulum Display === -->
 
        <!-- Messages and Turn Summary -->
       <div class="messages" ref="battleLogContainer">
             <p v-if="battleMessage" class="battle-message">{{ battleMessage }}</p>
             <p v-if="battleError" class="error-message">Error: {{ battleError }}</p>
-            
-            <!-- Display structured log -->
             <div v-if="battle.last_turn_summary && battle.last_turn_summary.length" class="turn-summary">
                 <ul>
-                    <li 
-                        v-for="(entry, index) in battle.last_turn_summary" 
-                        :key="battle.id + '- ' + index" 
-                        :class="[
-                            'log-entry-container', 
-                            { 
-                                'log-user': entry.source === userPlayerRole, 
-                                'log-opponent': entry.source !== userPlayerRole && entry.source !== 'system',
-                                'log-system': entry.source === 'system'
-                            }
-                        ]"
-                    >
-                        <span 
-                           :class="[
-                               'log-bubble', 
-                               `bubble-effect-${entry.effect_type}`,
-                               entry.effect_details?.stat ? `bubble-stat-${entry.effect_details.stat}` : ''
-                           ]"
+                    <template v-for="(entry, index) in battle.last_turn_summary" :key="battle.id + '-entry-' + index">
+                        <!-- ADDED: Turn Separator Line -->
+                        <li v-if="entry.effect_type === 'turnchange'" class="log-turn-separator" aria-hidden="true"></li>
+                        
+                        <!-- Existing Log Entry List Item -->
+                        <li 
+                            :class="{
+                                'log-entry-container': true,
+                                [`source-${entry.source || 'unknown'}`]: true, /* Use computed property name */
+                                'log-user': entry.source === userPlayerRole,
+                                'log-opponent': entry.source !== userPlayerRole && entry.source !== 'system' && entry.source !== 'script' && entry.source !== 'debug',
+                                'log-system': entry.source === 'system' || entry.source === 'script' || entry.source === 'debug'
+                                // 'log-entry-turnchange': entry.effect_type === 'turnchange' /* Keep commented */
+                            }"
                         >
-                            <!-- Display Emoji for 'action' type -->
-                            <span v-if="entry.effect_type === 'action' && entry.effect_details?.emoji" class="log-emoji">{{ entry.effect_details.emoji }}</span>
-                            
-                            <!-- Add arrow for stat changes -->
-                            <span v-if="entry.effect_type === 'stat_change' && entry.effect_details?.mod > 0" class="stat-arrow up">▲</span>
-                            <span v-if="entry.effect_type === 'stat_change' && entry.effect_details?.mod < 0" class="stat-arrow down">▼</span>
-                            
-                            {{ entry.text }}
-                        </span>
-                    </li>
+                            <span
+                               :class="[
+                                   'log-bubble',
+                                   `effect-${entry.effect_type || 'info'}`,
+                                   entry.effect_details?.stat ? `bubble-stat-${entry.effect_details.stat}` : '',
+                                   entry.effect_type === 'stat_change' && entry.effect_details?.mod > 0 ? 'stat-arrow-up' : '',
+                                   entry.effect_type === 'stat_change' && entry.effect_details?.mod < 0 ? 'stat-arrow-down' : ''
+                               ]"
+                            >
+                                <span v-if="entry.effect_type === 'action' && entry.effect_details?.emoji" class="log-emoji">{{ entry.effect_details.emoji }}</span>
+                                <span v-if="entry.effect_type === 'stat_change' && entry.effect_details?.mod > 0" class="stat-arrow up">▲</span>
+                                <span v-if="entry.effect_type === 'stat_change' && entry.effect_details?.mod < 0" class="stat-arrow down">▼</span>
+                                {{ entry.text }}
+                            </span>
+                        </li>
+                    </template>
                 </ul>
             </div>
-            <!-- Add a placeholder/spacer at the bottom if needed -->
              <div style="height: 1px;"></div> 
       </div>
 
-       <!-- Action Selection -->
+       <!-- Action Selection (Update hover display) -->
        <div v-if="battle.status === 'active' && userPlayer" class="action-selection">
-            <!-- REMOVED v-if="canAct" wrapper -->
             <h3>Choose your Attack:</h3>
-            <!-- Iterate over my_selected_attacks -->
-            <!-- Ensure disabled overlay class is still applied -->
-           <ul class="attacks-grid battle-attacks" :class="{ 'disabled-overlay': !canAct }">
-             <li 
-                v-for="action in mySelectedAttacks" 
-                :key="action.id" 
-                class="attack-card" 
-                :class="{ 
-                    selected: selectedAttackId === action.id && canAct,
-                    disabled: !canAct || submittingAction 
-                 }" 
-                @click="canAct && selectAttack(action)" 
-                @mouseenter="previewAttackMomentum(action)" 
-                @mouseleave="clearMomentumPreview"
-                role="button" 
-                :aria-pressed="selectedAttackId === action.id && canAct"
-                :tabindex="!canAct || submittingAction ? -1 : 0"
-             >
-               <AttackCardDisplay :attack="action"></AttackCardDisplay> 
-             </li>
-           </ul>
-            <!-- Always render the list, rely on CSS for disabled state -->
-           <p v-if="!mySelectedAttacks.length" class="no-items-message">No attacks selected or available.</p>
-           <!-- REMOVED v-else waiting message -->
+            <!-- Use AttackGrid for action selection -->
+            <AttackGrid
+                :attacks="mySelectedAttacks"
+                mode="select" 
+                :selectedIds="selectedAttackId ? [selectedAttackId] : []" 
+                :maxSelectable="1"
+                @update:selectedIds="(ids) => { selectedAttackId = ids.length > 0 ? ids[0] : null }"
+                :class="{ 'disabled-overlay': !canAct || submittingAction }" 
+                class="battle-action-grid"
+            >
+                <template #empty>No attacks available.</template>
+            </AttackGrid>
+           <!-- Removed old ul.attacks-grid -->
+           <!-- <p v-if="!mySelectedAttacks.length" class="no-items-message">No attacks selected or available.</p> -->
 
            <button 
                 @click="submitAction"
                 :disabled="!canAct || !selectedAttackId || submittingAction"
                 class="submit-action-button button button-primary"
             >
-               <!-- Button text still correctly reflects canAct -->
                <span v-if="!canAct">Waiting for {{ opponentPlayer?.username }}...</span>
                <span v-else-if="submittingAction">Submitting...</span>
                <span v-else>Confirm Attack</span>
            </button>
        </div>
 
-      <!-- Finished State -->
+      <!-- Finished State (Unchanged) -->
       <div v-if="battle.status === 'finished'">
           <h2>Battle Over!</h2>
           <p v-if="battle.winner?.id === currentUser?.id">You won!</p>
@@ -559,7 +613,7 @@ watch(() => battle.value?.status, (newStatus) => {
 <style scoped>
 .battle-container {
   padding: 1rem 2rem 2rem 2rem;
-  max-width: 1800px; /* Increased width further */
+  max-width: 1200px; /* Adjusted width */
   margin: 1rem auto;
   background-color: var(--color-background-soft);
   border-radius: 8px;
@@ -693,9 +747,9 @@ progress.hp-low::-moz-progress-bar {
 .messages {
     margin: 1.5rem 0;
     padding: 0.5rem; 
-    min-height: 150px; 
-    max-height: 250px; 
-    background-color: var(--color-background); /* Change background to main background */
+    min-height: 200px;
+    max-height: 400px;
+    background-color: var(--color-background);
     border: 1px solid var(--color-border);
     border-radius: 6px;
     display: flex; 
@@ -705,17 +759,16 @@ progress.hp-low::-moz-progress-bar {
 
 .battle-message,
 .error-message {
-    padding: 0 0.5rem; /* Add horizontal padding to messages */
+    padding: 0 0.5rem;
     margin-bottom: 0.5rem;
-    flex-shrink: 0; /* Prevent messages from shrinking */
+    flex-shrink: 0;
 }
 
 .turn-summary {
     flex-grow: 1; 
     display: flex;
     flex-direction: column;
-    /* overflow-y: auto; -> Moved to parent .messages */
-    padding: 0 0.5rem; /* Add padding for scrollbar */
+    padding: 0 0.5rem;
 }
 
 .turn-summary ul {
@@ -730,19 +783,15 @@ progress.hp-low::-moz-progress-bar {
     display: flex; 
 }
 
-/* Default alignment (for system messages) */
-.log-system {
-   justify-content: center;
-}
-
-/* Align user bubbles left */
-.log-user {
+/* --- Alignment by Source --- */
+.log-entry-container.log-user {
    justify-content: flex-start;
 }
-
-/* Align opponent bubbles right */
-.log-opponent {
+.log-entry-container.log-opponent {
     justify-content: flex-end;
+}
+.log-entry-container.log-system {
+   justify-content: center;
 }
 
 /* The bubble itself */
@@ -751,38 +800,133 @@ progress.hp-low::-moz-progress-bar {
     border-radius: 15px; 
     max-width: 70%; 
     word-wrap: break-word; 
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2); /* Keep subtle shadow */
-    line-height: 1.3; /* Ensure text fits well */
-    display: inline-flex; /* Use flex for icon + text */
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2); 
+    line-height: 1.3; 
+    display: inline-flex; 
     align-items: center;
     gap: 0.3em;
+    border: 1px solid transparent;
+    transition: background-color 0.2s ease, color 0.2s ease;
 }
 
-/* User bubble style */
-.log-user .log-bubble {
-    background-color: var(--vt-c-indigo); /* Changed to indigo */
+/* --- Log Bubble Styling by Source --- */
+.log-entry-container.source-player1 .log-bubble,
+.log-entry-container.source-player2 .log-bubble {
+    background-color: var(--vt-c-indigo); 
     color: white; 
-    border-bottom-left-radius: 3px; 
+    border-bottom-left-radius: 3px;
+}
+.log-entry-container.log-opponent .log-bubble {
+     border-bottom-right-radius: 3px; 
+     border-bottom-left-radius: 15px;
 }
 
-/* Opponent bubble style */
-.log-opponent .log-bubble {
-    background-color: var(--vt-c-indigo); /* Already indigo, confirming */
+.log-entry-container.source-script .log-bubble {
+    background-color: #5a5f89;
     color: white;
-    border-bottom-right-radius: 3px; 
 }
 
-/* System message style */
-.log-system .log-bubble {
+.log-entry-container.source-system .log-bubble {
+    color: var(--color-text-mute);
+    background-color: transparent;
+    box-shadow: none;
+    font-style: italic;
+    border: none;
+    padding: 0.1rem 0.5rem;
+}
+
+.log-entry-container.source-debug .log-bubble {
+    color: #666; 
+    background-color: transparent;
+    box-shadow: none;
+    font-style: italic;
+    opacity: 0.6;
+    font-size: 0.85em;
+    padding: 0.1rem 0.5rem;
+    border: none;
+}
+
+/* --- Log Bubble Styling by Effect Type --- */
+.log-bubble.effect-action {
+    /* Keep player/script background */
+}
+
+/* NEW: Turn Change Separator Style */
+.log-turn-separator {
+    list-style: none; /* Remove potential bullet point */
+    height: 1px;
+    background-color: var(--color-border-hover);
+    margin: 1rem 0.5rem; /* Add vertical spacing */
+    flex-basis: 100%; /* Ensure it takes full width within flex context if needed */
+}
+
+/* NEW: Optional style to make turn change messages less prominent if desired */
+/* 
+.log-bubble.effect-turnchange {
+    background-color: transparent;
     color: var(--color-text-mute);
     font-style: italic;
-    background-color: transparent; 
-    box-shadow: none; /* Remove shadow for system messages */
-    max-width: 90%; /* Allow system messages to be wider */
-    text-align: center; /* Ensure text inside bubble is centered */
-    border-radius: 0; /* No rounding for system messages */
-    padding: 0.1rem 0.5rem; /* Less padding for system */
+    font-size: 0.9em;
+    box-shadow: none;
+    border: none;
+    text-align: center; 
+    padding: 0.2rem 0.5rem;
+} 
+*/
+
+.log-bubble.effect-damage {
+    background-color: var(--vt-c-red-soft);
+    color: var(--vt-c-red-dark);
+    border-color: var(--vt-c-red);
 }
+
+.log-bubble.effect-heal {
+    background-color: var(--vt-c-green-soft);
+    color: var(--vt-c-green-dark);
+    border-color: var(--vt-c-green);
+}
+
+.log-bubble.effect-stat_change {
+    /* Style based on arrow */
+}
+
+.log-bubble.effect-status_apply,
+.log-bubble.effect-status_remove,
+.log-bubble.effect-status_effect {
+     background-color: var(--color-background-mute);
+     color: var(--color-text);
+     border-style: dashed;
+     border-color: var(--color-border-hover);
+}
+
+.log-bubble.effect-info {
+    /* Keep neutral, source styles will apply */
+    color: var(--color-text);
+}
+/* Override for system/script info */
+.log-entry-container.source-system .log-bubble.effect-info,
+.log-entry-container.source-script .log-bubble.effect-info {
+     color: var(--color-text-mute); 
+     background-color: transparent;
+     box-shadow: none;
+}
+
+.log-bubble.effect-error {
+    background-color: var(--vt-c-red-dark);
+    color: white;
+    font-weight: bold;
+    border: none;
+}
+
+.log-bubble.effect-debug {
+    /* Style already handled by source-debug */
+}
+
+/* --- Icon/Arrow Styles --- */
+.stat-arrow { display: inline-block; margin-right: 0.2em; font-weight: bold; }
+.stat-arrow.up { color: var(--vt-c-green); }
+.stat-arrow.down { color: var(--vt-c-red); }
+.log-emoji { margin-right: 0.3em; font-size: 1.1em; line-height: 1; }
 
 .action-selection {
     margin-top: 1.5rem;
@@ -792,19 +936,18 @@ progress.hp-low::-moz-progress-bar {
 
 .attacks-grid.battle-attacks {
     display: grid;
-    /* Adjust columns based on available space, maybe fewer than 3 */
     grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); 
     gap: 0.8rem;
     list-style: none;
     padding: 0;
-    margin: 0 0 1.5rem 0; /* Add bottom margin */
+    margin: 0 0 1.5rem 0;
 }
 
 .attack-card {
     background-color: var(--color-background);
     border: 1px solid var(--color-border-hover);
     border-radius: 8px;
-    padding: 0.8rem; /* Keep padding on the li */
+    padding: 0.8rem;
     text-align: center;
     min-height: 110px; 
     display: flex; 
@@ -815,7 +958,6 @@ progress.hp-low::-moz-progress-bar {
     cursor: pointer;
 }
 
-/* Keep hover, selected, disabled styles on the parent li */
 .attack-card:hover:not(.disabled) {
     transform: translateY(-3px);
     box-shadow: 0 4px 8px rgba(0,0,0,0.1);
@@ -836,18 +978,14 @@ progress.hp-low::-moz-progress-bar {
     pointer-events: none; 
 }
 
-/* ... (rest of styles) ... */
-
 .submit-action-button {
-    /* Base styles inherited from .button */
     padding: 0.8rem 1.5rem; 
     font-size: 1em;
     display: block; 
-    margin: 1.5rem auto 0 auto; /* Adjust margin */
+    margin: 1.5rem auto 0 auto;
     min-width: 180px;
 }
 
-/* Override disabled state if needed (optional, .button:disabled might be sufficient) */
 .submit-action-button:disabled {
     background-color: var(--color-background-mute); 
     border-color: var(--color-border); 
@@ -856,12 +994,6 @@ progress.hp-low::-moz-progress-bar {
     opacity: 0.7;
     animation: none;
     box-shadow: none;
-}
-
-/* Ensure vt-c-green-rgb is defined if not already */
-:root {
-  /* Add other RGB values if needed */
-  --vt-c-green-rgb: 66, 184, 131; /* Example for Vue Green */
 }
 
 .error-message {
@@ -873,7 +1005,7 @@ progress.hp-low::-moz-progress-bar {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 1rem; /* Add some space below */
+    margin-bottom: 1rem;
 }
 
 .concede-button {
@@ -895,14 +1027,13 @@ progress.hp-low::-moz-progress-bar {
 }
 
 .stat-badges-container {
-    min-height: 20px; /* Ensure space even if no badges */
+    min-height: 20px;
 }
 
 .stat-badges {
-    display: flex; /* Changed to flex */
-    flex-wrap: wrap; /* Allow wrapping */
+    display: flex;
+    flex-wrap: wrap;
     gap: 0.4rem; 
-    /* Removed margin-left */
 }
 
 .hp-display {
@@ -912,189 +1043,230 @@ progress.hp-low::-moz-progress-bar {
     margin-top: auto; 
 }
 
-/* Style for Momentum Display */
-.momentum-display {
-    font-size: 0.9em;
-    color: var(--color-text-mute);
-    text-align: right; /* Match HP text alignment */
-    font-weight: bold;
-    margin-bottom: 0.5rem; /* Space before HP */
-}
-
-/* --- Momentum Bar Styles (Updated for Uncertainty Preview) --- */
-.momentum-bar-container {
-    margin: 0.5rem 0 1.5rem 0; /* Adjust spacing */
-    padding: 0.5rem 0;
-}
-
-.momentum-labels {
-    display: flex;
-    justify-content: space-between;
-    font-size: 0.9em;
-    color: var(--color-text-mute);
-    margin-bottom: 0.3rem;
-    padding: 0 5px; /* Align with bar padding */
-    align-items: center; /* Vertically center labels */
-}
-.momentum-labels .label-title {
-    font-weight: bold;
-    color: var(--color-heading); /* Default/Neutral color */
-    transition: color 0.3s ease;
-}
-/* --- UPDATED Advantage Classes --- */
-.momentum-labels .label-title.user-advantage {
-    color: var(--vt-c-blue);
-}
-.momentum-labels .label-title.opponent-advantage {
-    color: var(--vt-c-red);
-}
-.momentum-labels .label-p1,
-.momentum-labels .label-p2 {
-    /* Make difference display less prominent? Or keep bold? */
-    min-width: 2em; /* Add some min width to prevent layout shift */
-    text-align: center;
-}
-
-.momentum-bar {
-    height: 10px; 
-    background-color: var(--vt-c-red); /* Bolder opponent side */
-    border-radius: 5px;
+.momentum-pendulum-container {
     position: relative;
-    overflow: hidden; /* Hide overflow of fill/preview */
-    border: 1px solid var(--color-border);
+    height: 100px;
+    margin: 1rem auto 2rem auto;
+    width: 200px;
 }
 
-.momentum-bar-fill {
+.pendulum-pivot {
     position: absolute;
-    left: 0; top: 0; bottom: 0;
-    width: var(--fill-width, 50%); /* Default to 50% if no momentum */
-    background-color: var(--vt-c-blue); /* Bolder user side */
-    transition: width 0.4s ease-out;
-}
-
-.momentum-bar-marker {
-    position: absolute;
-    top: -3px; /* Position slightly above */
-    bottom: -3px;
-    width: 4px;
-    background-color: var(--vt-c-white); /* White marker */
-    left: 50%; 
+    top: 0;
+    left: 50%;
     transform: translateX(-50%);
-    border-radius: 2px;
-    box-shadow: 0 0 3px rgba(0,0,0,0.5);
-    transition: background-color 0.3s ease;
+    width: 10px;
+    height: 10px;
+    background-color: var(--color-border-hover);
+    border-radius: 50%;
+    z-index: 3;
 }
 
-/* --- UPDATED Marker Advantage Classes --- */
-.momentum-bar-marker.user-advantage {
-    background-color: var(--vt-c-blue-dark); /* Darker blue for advantage */
-}
-.momentum-bar-marker.opponent-advantage {
-    background-color: var(--vt-c-red-dark); /* Darker red for advantage */
-}
-/* Keep white for neutral */
-
-.momentum-preview {
+.pendulum-arm {
     position: absolute;
-    top: 0; bottom: 0;
-    background-color: rgba(255, 255, 255, 0.3);
-    transition: left 0.2s ease-out, width 0.2s ease-out;
-    pointer-events: none; 
-    border: none; 
-    /* Remove generic left/width - apply based on player class */
-    /* left: var(--preview-start-percent, 50%); */ 
-    /* width: calc(var(--preview-end-percent, 50%) - var(--preview-start-percent, 50%)); */
-    border-left: 2px solid rgba(255, 255, 255, 0.5);
-    border-right: 2px solid rgba(255, 255, 255, 0.5);
+    bottom: 20px;
+    left: 50%; 
+    width: 4px;
+    height: 80px;
+    background-color: var(--color-text-mute);
+    border-radius: 2px;
+    transform-origin: top center;
+    transition: transform 0.5s cubic-bezier(0.68, -0.55, 0.27, 1.55);
+    z-index: 2;
 }
 
-/* Preview positioning when Player 1 acts */
-.momentum-preview.player1 {
-    left: var(--preview-start-percent, 50%); 
-    width: calc(var(--preview-end-percent, 50%) - var(--preview-start-percent, 50%));
-}
-
-/* Preview positioning when Player 2 acts */
-.momentum-preview.player2 {
-    left: var(--preview-end-percent, 50%); /* Start at the lower percentage */
-    width: calc(var(--preview-start-percent, 50%) - var(--preview-end-percent, 50%)); /* Width is difference (start - end) */
-}
-
-/* --- Perspective Flipping --- */
-
-/* Flip the entire bar visually for Player 2 */
-.perspective-player2 .momentum-bar {
-    transform: scaleX(-1);
-    /* Background should represent User (P2 = blue) */
+.pendulum-arm.user {
     background-color: var(--vt-c-blue);
 }
-
-/* Fill color should represent Opponent (P1 = red) */
-.perspective-player2 .momentum-bar-fill {
+.pendulum-arm.opponent {
     background-color: var(--vt-c-red);
 }
 
-/* Flip the content *back* so it's not mirrored */
-.perspective-player2 .momentum-bar > *:not(.momentum-bar-fill) { 
-    transform: scaleX(-1);
+.pendulum-weight {
+    position: absolute;
+    bottom: -8px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 20px;
+    height: 20px;
+    background-color: inherit; 
+    border-radius: 50%;
+    border: 2px solid var(--color-background-soft);
+    display: flex;
+    justify-content: center;
+    align-items: center;
 }
-.perspective-player2 .momentum-bar-fill {
-    transform: scaleX(-1);
-}
 
-/* Optional: Flip labels as well if desired */
-/* ... */
-
-/* --- End Perspective Flipping --- */
-
-/* --- ADDED BACK: Stat Badge Colors --- */
-.stat-badge {
-    /* Keep existing badge styles */
-    display: inline-block;
-    padding: 0.2rem 0.5rem;
-    font-size: 0.75em;
+.momentum-value {
+    color: white;
+    font-size: 0.7em;
     font-weight: bold;
-    border-radius: 8px; 
-    color: white; 
-    text-transform: uppercase;
-    line-height: 1.1; 
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2); 
+    text-shadow: 0 0 2px black;
 }
-.badge-attack {
-    background-color: var(--vt-c-red); 
-}
-.badge-defense {
-     background-color: var(--vt-c-blue); 
-}
-.badge-speed {
-     background-color: var(--vt-c-yellow-darker); 
-     color: white; /* Ensure text stays white */
-}
-/* ------------------------------------ */
 
-/* Optional: Add overlay effect to the grid when disabled */
-.attacks-grid.disabled-overlay::after {
+.pendulum-arm.ghost {
+    opacity: 0.3;
+    z-index: 1;
+    background-color: grey;
+    transition: transform 0.3s ease-out;
+}
+.pendulum-arm.ghost.user {
+     background-color: var(--vt-c-blue-light);
+}
+.pendulum-arm.ghost.opponent {
+     background-color: var(--vt-c-red-light);
+}
+.ghost-weight .momentum-value {
+    opacity: 0.8;
+}
+
+.pendulum-weight.ghost-weight {
+    border-color: transparent;
+    background-color: inherit;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    border: none;
+}
+
+.pendulum-base {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 20px;
+    background: linear-gradient(to right, var(--vt-c-blue-soft), var(--color-background-mute), var(--vt-c-red-soft));
+    border-radius: 5px;
+    border: 1px solid var(--color-border);
+    z-index: 0;
+}
+
+.pendulum-labels {
+    position: absolute;
+    bottom: 2px;
+    left: 0;
+    right: 0;
+    display: flex;
+    justify-content: space-between;
+    padding: 0 10px;
+    font-size: 0.8em;
+    font-weight: bold;
+    z-index: 1;
+}
+
+.pendulum-label.user-label {
+    color: var(--vt-c-blue-dark);
+}
+
+.pendulum-label.opponent-label {
+    color: var(--vt-c-red-dark);
+}
+
+.pendulum-center-line {
+    position: absolute;
+    top: 10px;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    border-left: 2px dotted var(--color-border-hover);
+    width: 0;
+    z-index: 0;
+}
+
+.stat-badge {
+    display: inline-block;
+    padding: 0.2em 0.5em;
+    font-size: 0.8em;
+    font-weight: 600;
+    border-radius: 4px;
+    color: var(--vt-c-white-soft);
+    text-shadow: 1px 1px 1px rgba(0,0,0,0.3);
+}
+
+.stat-badge.badge-attack {
+    background-color: var(--vt-c-red-dark);
+}
+.stat-badge.badge-defense {
+    background-color: var(--vt-c-blue-dark);
+}
+.stat-badge.badge-speed {
+    background-color: var(--vt-c-yellow-darker);
+}
+
+.custom-statuses {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem; 
+    margin-top: 0.4rem;
+}
+
+.custom-status-badge {
+    display: inline-block;
+    padding: 0.2em 0.5em;
+    font-size: 0.8em;
+    font-weight: 500;
+    border-radius: 4px;
+    text-transform: capitalize;
+    border: 1px solid transparent;
+}
+
+.player-panel {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.stat-stages, .custom-statuses {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.4rem;
+    margin-bottom: 0.5rem;
+    min-height: 20px;
+}
+
+.stat-badge, .status-badge {
+    padding: 0.2rem 0.6rem;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    border: 1px solid transparent;
+}
+
+.stat-badge.stat-up {
+    background-color: rgba(76, 175, 80, 0.2);
+    color: #388E3C;
+    border-color: #388E3C;
+}
+
+.stat-badge.stat-down {
+    background-color: rgba(244, 67, 54, 0.2);
+    color: #D32F2F;
+    border-color: #D32F2F;
+}
+
+.status-badge.status-custom {
+    background-color: rgba(158, 158, 158, 0.2);
+    color: #616161;
+    border-color: #616161;
+}
+
+.battle-action-grid {
+    margin-bottom: 1.5rem; 
+    position: relative; 
+}
+
+.battle-action-grid.disabled-overlay::after {
     content: '';
     position: absolute;
     top: 0;
     left: 0;
     right: 0;
     bottom: 0;
-    background-color: rgba(0, 0, 0, 0.1); /* Subtle dark overlay */
-    border-radius: 8px; /* Match grid container if it has one */
-    pointer-events: none; /* Ensure clicks go through to disabled elements if needed */
-    z-index: 1; /* Place above cards but below potential popups */
+    background-color: rgba(50, 50, 50, 0.4);
+    z-index: 5;
+    border-radius: 8px;
+    cursor: not-allowed;
 }
-.attacks-grid {
-    position: relative; /* Needed for absolute positioning of overlay */
-}
-
-.waiting-message {
-    /* Remove this style block if no longer needed */
-    text-align: center;
-    padding: 2rem 0;
-    color: var(--color-text-mute);
-    font-style: italic;
-}
-
 </style> 

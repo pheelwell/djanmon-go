@@ -130,15 +130,32 @@ export const useGameStore = defineStore('game', () => {
       }
       try {
           const response = await apiClient.get('/game/battles/active/');
+          // --- REMOVE DEBUG LOGGING ---
+          // console.log(`[fetchActiveBattle Polling=${isPolling}] Status: ${response.status}, Data:`, JSON.stringify(response.data));
+          // --- END REMOVE DEBUG ---
           const oldBattleState = JSON.stringify(activeBattle.value);
           const newBattleState = JSON.stringify(response.data);
+          // --- REMOVE DEBUG LOGGING ---
+          const changed = oldBattleState !== newBattleState;
+          // console.log(`[fetchActiveBattle Polling=${isPolling}] State changed? ${changed}`);
+          // --- END REMOVE DEBUG ---
           // Only update if state actually changed to avoid needless reactivity triggers
-          if (oldBattleState !== newBattleState) { 
+          if (changed) {
+              // console.log(`[fetchActiveBattle Polling=${isPolling}] Updating activeBattle.value`); // REMOVE DEBUG
               activeBattle.value = response.data;
           }
       } catch (error) {
+          // --- REMOVE DEBUG LOGGING ---
+          const status = error.response ? error.response.status : 'N/A';
+          // console.log(`[fetchActiveBattle Polling=${isPolling}] Error Status: ${status}`, error.message);
+          // --- END REMOVE DEBUG ---
           if (error.response && error.response.status === 404) {
+               // --- REMOVE DEBUG LOGGING ---
+              if (activeBattle.value !== null) {
+                 // console.log(`[fetchActiveBattle Polling=${isPolling}] Clearing activeBattle.value due to 404`); // REMOVE DEBUG
               activeBattle.value = null;
+              }
+               // --- END REMOVE DEBUG ---
           } else {
               console.error('Failed to fetch active battle:', error.response?.data || error.message);
               // Maybe set a specific error if needed, but avoid overwriting actionError
@@ -277,6 +294,28 @@ export const useGameStore = defineStore('game', () => {
       // turnSummary.value = []; // Decide if this should be cleared here
   }
 
+  // --- REMOVED: Attack Generation Actions ---
+
+  // Generate new attacks based on concept (and optionally favorites)
+  async function generateAttacks(concept, favorite_attack_ids = []) { // Updated signature
+    // isLoading can be handled by the component calling this
+    try {
+      const payload = {
+        concept: concept,
+        favorite_attack_ids: favorite_attack_ids
+      };
+          const response = await apiClient.post('/game/attacks/generate/', payload);
+      // The response should contain the newly generated attacks and a success message
+      // It might implicitly update the user's credits via the auth store refresh in the component
+      return response.data; // Return the response { message: '...', attacks: [...] }
+      } catch (error) {
+      console.error('Failed to generate attacks:', error.response?.data || error.message);
+      const errorMessage = error.response?.data?.error || 'Failed to open booster.';
+      // Throw the error so the component can catch it and display it
+      throw new Error(errorMessage); 
+    }
+  }
+
   return {
     // State
     users,
@@ -313,5 +352,6 @@ export const useGameStore = defineStore('game', () => {
     // NEW: Leaderboard Actions Exports
     fetchMyStats, // New action
     fetchLeaderboard, // New action
+    generateAttacks, // <-- Export updated action
   };
 }); 

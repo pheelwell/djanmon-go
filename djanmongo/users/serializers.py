@@ -70,9 +70,9 @@ class UserSerializer(serializers.ModelSerializer):
         model = User
         fields = (
             'id', 'username', 'level', 'hp', 'attack', 'defense', 'speed',
-            'attacks', 'selected_attacks' 
+            'attacks', 'selected_attacks', 'booster_credits'
         )
-        read_only_fields = fields
+        read_only_fields = ('id', 'username', 'level', 'hp', 'attack', 'defense', 'speed', 'attacks', 'selected_attacks', 'booster_credits')
 
     def get_attacks(self, user_instance):
         # Moved import inside method
@@ -85,6 +85,45 @@ class UserSerializer(serializers.ModelSerializer):
         from game.serializers import AttackSerializer
         attacks_queryset = user_instance.selected_attacks.all()
         return AttackSerializer(attacks_queryset, many=True, read_only=True).data
+
+# --- NEW: Serializer for Updating Base Stats --- 
+STAT_INCREMENT = 10
+MIN_STAT_VALUE = 10
+TARGET_SUM = 400
+
+class UserStatsUpdateSerializer(serializers.ModelSerializer):
+    hp = serializers.IntegerField(min_value=MIN_STAT_VALUE)
+    attack = serializers.IntegerField(min_value=MIN_STAT_VALUE)
+    defense = serializers.IntegerField(min_value=MIN_STAT_VALUE)
+    speed = serializers.IntegerField(min_value=MIN_STAT_VALUE)
+
+    class Meta:
+        model = User
+        fields = ('hp', 'attack', 'defense', 'speed') # Fields to update
+
+    def validate(self, data):
+        hp = data.get('hp')
+        attack = data.get('attack')
+        defense = data.get('defense')
+        speed = data.get('speed')
+        
+        # Check increments
+        for stat_name, value in data.items():
+            if value % STAT_INCREMENT != 0:
+                raise serializers.ValidationError({stat_name: f"Stat must be a multiple of {STAT_INCREMENT}."})
+
+        # Check sum
+        current_sum = hp + attack + defense + speed
+        if current_sum != TARGET_SUM:
+            raise serializers.ValidationError(
+                f"Total stats must sum to {TARGET_SUM}. Current sum: {current_sum}."
+            )
+            
+        return data
+        
+    # Override update if necessary, but RetrieveUpdateAPIView might handle it
+    # if the fields match the model fields directly.
+
 
 # --- NEW: Leaderboard Serializers ---
 

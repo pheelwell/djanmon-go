@@ -12,3 +12,6 @@ gunicorn>=20.1.0
 lupa
 django-editor-widgets
 sentry-sdk[django]
+bleach
+google-generativeai
+python-dotenv

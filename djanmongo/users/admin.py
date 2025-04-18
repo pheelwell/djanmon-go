@@ -7,20 +7,21 @@ from .models import User
 # The order might matter subtly, but typically putting ModelAdmin first or second works.
 # Let's try BaseUserAdmin first, then ModelAdmin.
 class UserAdmin(BaseUserAdmin, ModelAdmin): 
-    # Your existing customizations remain the same:
-    list_display = ('username', 'email', 'first_name', 'last_name', 'level', 'hp', 'attack', 'defense', 'speed', 'is_staff')
-
-    # Fieldsets: This structure should work fine. Unfold respects Django's fieldsets.
-    fieldsets = BaseUserAdmin.fieldsets + (
-        ('Custom Stats', {'fields': ('level', 'hp', 'attack', 'defense', 'speed', 'attacks')}),
-    )
-    add_fieldsets = BaseUserAdmin.add_fieldsets + (
-        ('Custom Stats', {'fields': ('level', 'hp', 'attack', 'defense', 'speed', 'attacks')}),
-    )
-
     # filter_horizontal: This should also work fine with Unfold.
     filter_horizontal = ('attacks', 'groups', 'user_permissions',)
     list_editable = ('level', 'hp', 'attack', 'defense', 'speed')
+    
+    # Your existing customizations remain the same:
+    list_display = ('username', 'email', 'first_name', 'last_name', 'level', 'hp', 'attack', 'defense', 'speed', 'booster_credits', 'is_staff')
+
+    # Fieldsets: This structure should work fine. Unfold respects Django's fieldsets.
+    fieldsets =  (
+        ('Custom Stats', {'fields': ('level', 'hp', 'attack', 'defense', 'speed', 'booster_credits', 'attacks')}),
+    ) + BaseUserAdmin.fieldsets
+    add_fieldsets = (
+        ('Custom Stats', {'fields': ('level', 'hp', 'attack', 'defense', 'speed', 'booster_credits', 'attacks')}),
+    ) + BaseUserAdmin.add_fieldsets
+
 
 # No need to unregister if using AUTH_USER_MODEL correctly from the start
 

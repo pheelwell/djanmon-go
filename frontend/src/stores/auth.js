@@ -12,6 +12,8 @@ export const useAuthStore = defineStore('auth', () => {
   const registerError = ref(null);
   const isUpdatingMoveset = ref(false);
   const movesetUpdateError = ref(null);
+  const isUpdatingStats = ref(false);
+  const statsUpdateError = ref(null);
 
   // --- Getters --- 
   const isAuthenticated = computed(() => !!accessToken.value);
@@ -156,6 +158,29 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  // NEW ACTION: Update user stats
+  async function updateUserStats(statsData) {
+    if (!isAuthenticated.value) return;
+
+    isUpdatingStats.value = true;
+    statsUpdateError.value = null;
+
+    try {
+      // Use the existing apiClient instance which includes auth headers
+      const response = await apiClient.patch('/users/me/stats/', statsData);
+      // Update the currentUser state with the full profile returned by the backend
+      user.value = response.data; 
+      localStorage.setItem('user', JSON.stringify(response.data)); // Update local storage too
+    } catch (error) {
+      console.error('Failed to update user stats:', error.response?.data || error.message);
+      statsUpdateError.value = error.response?.data || {'detail': 'Could not save stats.'};
+      // Optionally re-fetch profile on error to ensure consistency?
+      // await fetchUserProfile(); 
+    } finally {
+      isUpdatingStats.value = false;
+    }
+  }
+
   return {
     // State refs
     accessToken,
@@ -165,6 +190,8 @@ export const useAuthStore = defineStore('auth', () => {
     registerError,
     isUpdatingMoveset,
     movesetUpdateError,
+    isUpdatingStats,
+    statsUpdateError,
 
     // Getters (computed)
     isAuthenticated,
@@ -176,5 +203,6 @@ export const useAuthStore = defineStore('auth', () => {
     register,
     fetchUserProfile,
     updateSelectedAttacks,
+    updateUserStats
   };
 }); 

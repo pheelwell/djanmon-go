@@ -19,7 +19,13 @@ local_settings.py
 frontend/node_modules/
 frontend/dist/
 frontend/.pnp*
-frontend/.env*
+
+# Ignore general .env files, but allow specific ones for build
+frontend/.env
+frontend/.env.*
+!frontend/.env.development
+!frontend/.env.production
+
 frontend/coverage/
 frontend/*.log*
 frontend/npm-debug.log*
@@ -39,4 +45,69 @@ frontend/yarn.lock         # If using npm instead of yarn
 
 # OS generated files
 .DS_Store
-Thumbs.db 
+Thumbs.db
+
+# Environment variables
+.env
+
+# Django stuff
+*.log
+*.pot
+*.pyc
+__pycache__/
+db.sqlite3
+/static
+/media
+
+# Python stuff
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+*.manifest
+*.spec
+dist/
+build/
+downloads/
+*.rpm
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*,cover
+*.log
+*.py[cod]
+*.so
+
+# Virtualenv
+.venv/
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# IDEs / OS files
+.project
+.pydevproject
+.settings/
+*.sublime-workspace
+*.sublime-project
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.history/*
+.idea/
+*.iml
+*.ipr
+.DS_Store
+Thumbs.db
+
+# node/frontend
+node_modules/
+dist/
+*.local 

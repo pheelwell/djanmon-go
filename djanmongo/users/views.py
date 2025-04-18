@@ -18,11 +18,12 @@ class RegisterView(generics.CreateAPIView):
     permission_classes = (permissions.AllowAny,)
     serializer_class = UserRegisterSerializer
 
-class UserProfileView(generics.RetrieveAPIView):
-    """Retrieves the profile of the currently authenticated user.
+class UserProfileView(generics.RetrieveUpdateAPIView):
+    """Retrieves or updates the profile of the currently authenticated user.
     
     Responds to GET requests with the logged-in user's data,
     serialized using `UserSerializer`.
+    Responds to PUT/PATCH requests to update user data (including base stats).
     Requires authentication.
     Endpoint: `/api/users/profile/` (typically)
     """
@@ -126,21 +127,37 @@ class UserSelectedAttacksUpdateView(APIView):
 
 # --- NEW: Leaderboard Views ---
 
-class UserStatsView(generics.RetrieveAPIView):
-    """Retrieves detailed battle statistics for the logged-in user.
+# --- MODIFIED: UserStatsView for GET and PATCH --- 
+class UserStatsView(generics.RetrieveUpdateAPIView):
+    """Retrieves or updates detailed battle statistics/base stats for the logged-in user.
 
-    Responds to GET requests with the user's win/loss record, nemesis, etc.,
-    serialized using `UserStatsSerializer`.
+    GET: Returns user's win/loss record, etc. (UserStatsSerializer).
+    PATCH/PUT: Updates user's base hp, attack, defense, speed (UserStatsUpdateSerializer).
     Requires authentication.
-    Endpoint: `/api/users/profile/stats/` (typically)
+    Endpoint: `/api/users/me/stats/` 
     """
     permission_classes = (permissions.IsAuthenticated,)
-    serializer_class = UserStatsSerializer
+    # serializer_class determined by get_serializer_class
 
     def get_object(self):
         """Returns the currently authenticated user."""
-        # The object is the requesting user
         return self.request.user
+
+    def get_serializer_class(self):
+        """Return appropriate serializer class based on request method."""
+        if self.request.method in ('PUT', 'PATCH'):
+            # Import locally to potentially avoid circular dependency issues
+            from .serializers import UserStatsUpdateSerializer 
+            return UserStatsUpdateSerializer
+        # For GET requests
+        from .serializers import UserStatsSerializer
+        return UserStatsSerializer
+
+    # Optional: Override perform_update for additional logic after successful update
+    # def perform_update(self, serializer):
+    #     # Add any post-save logic here if needed
+    #     super().perform_update(serializer)
+    #     # e.g., send a signal, log the update
 
 class LeaderboardView(generics.ListAPIView):
     """Provides a public leaderboard of users.

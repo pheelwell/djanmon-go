@@ -9,6 +9,12 @@ import { sentryVitePlugin } from "@sentry/vite-plugin";
 
 // https://vite.dev/config/
 export default defineConfig({
+  // alowed hosts
+  server: {
+    host: true,
+    port: 5173,
+    allowedHosts: ['lexmark-specialists-leone-legislation.trycloudflare.com'],
+  },
   // Enable sourcemaps for Sentry
   build: {
     sourcemap: true, 
