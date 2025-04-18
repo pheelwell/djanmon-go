@@ -171,21 +171,11 @@ SIMPLE_JWT = {
 GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', None)
 
 # --- CORS Settings ---
-# Allow requests from the Vue development server
-if DEBUG:
-    # Allow Vite dev server origin during development
-    CORS_ALLOWED_ORIGINS = [
-        'http://localhost:5173', # Adjust port if your Vite uses a different one
-        'http://127.0.0.1:5173',
-    ]
-else:
-    # Production: Get allowed origins from environment variable
-    CORS_ALLOWED_ORIGINS_STRING = os.environ.get('CORS_ALLOWED_ORIGINS')
-    print(f"Allowed origins:{CORS_ALLOWED_ORIGINS}")
-    if CORS_ALLOWED_ORIGINS_STRING:
-        CORS_ALLOWED_ORIGINS = CORS_ALLOWED_ORIGINS_STRING.split(',')
-    else:
-        CORS_ALLOWED_ORIGINS = [] # Or set specific defaults if needed
+CORS_ALLOWED_ORIGINS = [
+    'http://localhost:5173', # Adjust port if your Vite uses a different one
+    'http://127.0.0.1:5173',
+    'https://djanmon-go-1.onrender.com'
+]
 
 
 STATIC_URL = 'static/'

@@ -546,8 +546,18 @@ def process_and_save_generated_attacks(generated_data: list, user: User) -> list
             
     # --- Associate with User --- 
     if created_attacks:
-        user.attacks.add(*created_attacks)
-        user.refresh_from_db()
-        # user.save() # Not needed for M2M changes usually
+        credits_to_deduct = len(created_attacks)
+        if user.booster_credits >= credits_to_deduct:
+            user.booster_credits -= credits_to_deduct
+            user.attacks.add(*created_attacks)
+            user.save() # Save user after deducting credits and adding attacks
+            print(f"Deducted {credits_to_deduct} credits from {user.username}. New balance: {user.booster_credits}")
+        else:
+            print(f"Warning: User {user.username} has insufficient credits ({user.booster_credits}) to pay for {credits_to_deduct} generated attacks. Attacks were still granted.")
+            # Decide if you want to still grant the attacks if they can't pay.
+            # For now, we grant them but log a warning.
+            user.attacks.add(*created_attacks)
+            user.save() # Still save the M2M relationship change
+        user.refresh_from_db() # Ensure the user object reflects changes if needed later
     
     return created_attacks 

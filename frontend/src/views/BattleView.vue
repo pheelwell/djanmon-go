@@ -5,6 +5,8 @@ import { useGameStore } from '@/stores/game';
 import { useAuthStore } from '@/stores/auth';
 import AttackCardDisplay from '@/components/AttackCardDisplay.vue';
 import AttackGrid from '@/components/AttackGrid.vue';
+import PlayerInfoCard from '@/components/PlayerInfoCard.vue';
+import BattleLog from '@/components/BattleLog.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -30,6 +32,7 @@ const battle = computed(() => gameStore.activeBattle);
 const currentUser = computed(() => authStore.currentUser);
 const battleError = computed(() => gameStore.battleError);
 const battleMessage = computed(() => gameStore.battleMessage);
+const battleLogEntries = computed(() => battle.value?.last_turn_summary || []);
 
 // Determine player roles and opponent
 const userPlayerRole = computed(() => {
@@ -241,8 +244,6 @@ const currentTurnMomentum = computed(() => {
 
 // --- END Pendulum Logic ---
 
-const battleLogContainer = ref(null);
-
 // --- Methods ---
 async function fetchBattleData() {
     isLoading.value = true;
@@ -298,16 +299,6 @@ function stopPolling() {
      }
 }
 
-// Function to scroll log to bottom
-function scrollLogToBottom() {
-  nextTick(() => {
-    const container = battleLogContainer.value;
-    if (container) {
-      container.scrollTop = container.scrollHeight;
-    }
-  });
-}
-
 // Function to handle attack selection from card click
 function selectAttack(attackId) {
     if (!submittingAction.value && canAct.value) {
@@ -315,23 +306,10 @@ function selectAttack(attackId) {
     }
 }
 
-// Helper function for HP bar class
-function getHpBarClass(currentHp, maxHp, playerType) {
-    if (maxHp <= 0 || currentHp <= 0) return playerType === 'user' ? 'hp-bar-user' : 'hp-bar-opponent'; // Default if no HP
-    const percentage = (currentHp / maxHp) * 100;
-    let colorClass = 'hp-high';
-    if (percentage <= 50) colorClass = 'hp-medium';
-    if (percentage <= 20) colorClass = 'hp-low';
-    
-    const baseClass = playerType === 'user' ? 'hp-bar-user' : 'hp-bar-opponent';
-    return [baseClass, colorClass];
-}
-
 // --- Lifecycle Hooks ---
 onMounted(async () => {
   await fetchBattleData(); 
   if (battle.value) {
-       scrollLogToBottom();
        if (battle.value.status === 'active') {
            startPolling();
        }
@@ -344,55 +322,11 @@ onUnmounted(() => {
 });
 
 // --- Watchers ---
-watch(() => battle.value?.last_turn_summary, (newLog, oldLog) => {
-    scrollLogToBottom();
-}, { deep: true }); 
-
 watch(() => battle.value?.status, (newStatus) => {
     if (newStatus === 'finished' || newStatus === 'declined') {
         stopPolling();
-        scrollLogToBottom(); 
     }
 });
-
-// --- Formatting Helpers ---
-function formatStage(stage) {
-  return stage > 0 ? `+${stage}` : `${stage}`;
-}
-function getStatClass(stage) {
-  if (stage > 0) return 'stat-up';
-  if (stage < 0) return 'stat-down';
-  return '';
-}
-
-// --- NEW: Hashing and Color Generation for Statuses ---
-function stringToHashCode(str) {
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    const char = str.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash |= 0; // Convert to 32bit integer
-  }
-  return Math.abs(hash);
-}
-
-function getStatusColorStyle(statusName) {
-  const hash = stringToHashCode(statusName);
-  const hue = hash % 360; // Hue based on hash
-  const saturation = 60 + (hash % 21); // Saturation between 60-80%
-  const lightness = 45 + (hash % 11); // Lightness between 45-55%
-  
-  const backgroundColor = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
-  // Simple contrast check: if lightness is high, use dark text, else light text
-  const textColor = lightness > 50 ? '#111' : '#fff'; 
-  
-  return {
-    backgroundColor: backgroundColor,
-    color: textColor,
-    borderColor: `hsl(${hue}, ${saturation}%, ${lightness - 15}%)` // Slightly darker border
-  };
-}
-// --- END NEW ---
 
 </script>
 
@@ -418,77 +352,32 @@ function getStatusColorStyle(statusName) {
          </button>
       </div>
       
-      <!-- Player Info Display (Unchanged) -->
+      <!-- Player Info Display (UPDATED) -->
       <div class="players-display">
           <!-- User Card -->
-          <div class="player-card user">
-              <h3>{{ userPlayer?.username }} (You)</h3>
-              <div class="stat-badges-container">
-                  <span class="stat-badges"> 
-                     <template v-for="(stage, stat) in userStatStages" :key="stat">
-                         <span v-if="stage !== 0" :class="[
-                             'stat-badge',
-                             getStatClass(stage)
-                         ]">
-                             {{ stat.toUpperCase() }} {{ formatStage(stage) }}
-                         </span>
-                     </template>
-                  </span>
-                  <!-- Ensure Custom Statuses display exists -->
-                  <span class="custom-statuses"> 
-                     <template v-for="(value, name) in userCustomStatuses" :key="name">
-                         <span v-if="value" 
-                               class="custom-status-badge" 
-                               :style="getStatusColorStyle(name)">
-                             {{ name.replace(/_/g, ' ').toUpperCase() }} {{ typeof value === 'number' ? '(' + value + ')' : '' }} 
-                         </span>
-                     </template>
-                  </span>
-              </div>
-              <div class="hp-display">
-                 <p>HP: {{ userCurrentHp }} / {{ userPlayer?.hp }}</p>
-                 <progress 
-                    :value="userCurrentHp" 
-                    :max="userPlayer?.hp"
-                    :class="getHpBarClass(userCurrentHp, userPlayer?.hp, 'user')"
-                ></progress>
-              </div>
-          </div>
+          <PlayerInfoCard
+              v-if="userPlayer"
+              :player="userPlayer"
+              :currentHp="userCurrentHp"
+              :statStages="userStatStages"
+              :customStatuses="userCustomStatuses"
+              playerType="user"
+              :isCurrentUser="true"
+          />
+          <div v-else class="player-card placeholder">Loading...</div>
+
            <div class="vs-separator">VS</div>
+
            <!-- Opponent Card -->
-          <div class="player-card opponent">
-               <h3>{{ opponentPlayer?.username }}</h3>
-               <div class="stat-badges-container">
-                   <span class="stat-badges">
-                        <template v-for="(stage, stat) in opponentStatStages" :key="stat">
-                           <span v-if="stage !== 0" :class="[
-                               'stat-badge',
-                               getStatClass(stage)
-                           ]">
-                               {{ stat.toUpperCase() }} {{ formatStage(stage) }}
-                           </span>
-                       </template>
-                   </span>
-                    <!-- Ensure Custom Statuses display exists -->
-                   <span class="custom-statuses"> 
-                      <template v-for="(value, name) in opponentCustomStatuses" :key="name">
-                          <span v-if="value" 
-                                class="custom-status-badge" 
-                                :style="getStatusColorStyle(name)">
-                              {{ name.replace(/_/g, ' ').toUpperCase() }} {{ typeof value === 'number' ? '(' + value + ')' : '' }} 
-                          </span>
-                      </template>
-                   </span>
-               </div>
-               <div class="hp-display">
-                  <p>HP: {{ opponentCurrentHp }} / {{ opponentPlayer?.hp }}</p>
-                  <progress 
-                    :value="opponentCurrentHp" 
-                    :max="opponentPlayer?.hp"
-                    :class="getHpBarClass(opponentCurrentHp, opponentPlayer?.hp, 'opponent')"
-                 ></progress>
-               </div>
-          </div>
+           <PlayerInfoCard
+              v-if="opponentPlayer"
+              :player="opponentPlayer"
+              :currentHp="opponentCurrentHp"
+              :statStages="opponentStatStages"
+              :customStatuses="opponentCustomStatuses"
+              playerType="opponent"
+          />
+           <div v-else class="player-card placeholder">Loading...</div>
       </div>
 
       <!-- === UPDATED Pendulum Display === -->
@@ -522,46 +411,15 @@ function getStatusColorStyle(statusName) {
       </div>
       <!-- === End Pendulum Display === -->
 
-       <!-- Messages and Turn Summary -->
-      <div class="messages" ref="battleLogContainer">
+       <!-- Messages and Turn Summary (UPDATED) -->
+      <div class="messages-section">
             <p v-if="battleMessage" class="battle-message">{{ battleMessage }}</p>
             <p v-if="battleError" class="error-message">Error: {{ battleError }}</p>
-            <div v-if="battle.last_turn_summary && battle.last_turn_summary.length" class="turn-summary">
-                <ul>
-                    <template v-for="(entry, index) in battle.last_turn_summary" :key="battle.id + '-entry-' + index">
-                        <!-- ADDED: Turn Separator Line -->
-                        <li v-if="entry.effect_type === 'turnchange'" class="log-turn-separator" aria-hidden="true"></li>
-                        
-                        <!-- Existing Log Entry List Item -->
-                        <li 
-                            :class="{
-                                'log-entry-container': true,
-                                [`source-${entry.source || 'unknown'}`]: true, /* Use computed property name */
-                                'log-user': entry.source === userPlayerRole,
-                                'log-opponent': entry.source !== userPlayerRole && entry.source !== 'system' && entry.source !== 'script' && entry.source !== 'debug',
-                                'log-system': entry.source === 'system' || entry.source === 'script' || entry.source === 'debug'
-                                // 'log-entry-turnchange': entry.effect_type === 'turnchange' /* Keep commented */
-                            }"
-                        >
-                            <span
-                               :class="[
-                                   'log-bubble',
-                                   `effect-${entry.effect_type || 'info'}`,
-                                   entry.effect_details?.stat ? `bubble-stat-${entry.effect_details.stat}` : '',
-                                   entry.effect_type === 'stat_change' && entry.effect_details?.mod > 0 ? 'stat-arrow-up' : '',
-                                   entry.effect_type === 'stat_change' && entry.effect_details?.mod < 0 ? 'stat-arrow-down' : ''
-                               ]"
-                            >
-                                <span v-if="entry.effect_type === 'action' && entry.effect_details?.emoji" class="log-emoji">{{ entry.effect_details.emoji }}</span>
-                                <span v-if="entry.effect_type === 'stat_change' && entry.effect_details?.mod > 0" class="stat-arrow up">▲</span>
-                                <span v-if="entry.effect_type === 'stat_change' && entry.effect_details?.mod < 0" class="stat-arrow down">▼</span>
-                                {{ entry.text }}
-                            </span>
-                        </li>
-                    </template>
-                </ul>
-            </div>
-             <div style="height: 1px;"></div> 
+            <BattleLog
+                :logEntries="battleLogEntries"
+                :userPlayerRole="userPlayerRole"
+                :battleId="battleId"
+            />
       </div>
 
        <!-- Action Selection (Update hover display) -->
@@ -638,105 +496,17 @@ h1 {
     margin: 1.5rem 0;
 }
 
-.player-card {
-    min-width: 280px;
-    flex: 1; 
-    padding: 1rem 1.5rem;
-    border: 1px solid var(--color-border);
-    border-radius: 8px; /* Slightly more rounded */
-    background-color: var(--color-background-mute);
-    display: flex; 
-    flex-direction: column; 
-    gap: 0.6rem; /* Adjust gap between elements */
-}
+/* REMOVED: .player-card styles */
+/* REMOVED: .player-card h3 styles */
+/* REMOVED: .player-card p styles */
+/* REMOVED: .player-card progress styles */
+/* REMOVED: progress::-webkit-progress-bar styles */
+/* REMOVED: progress::-webkit-progress-value styles */
+/* REMOVED: progress::-moz-progress-bar styles */
+/* REMOVED: .hp-bar-* color styles */
+/* REMOVED: .hp-high, .hp-medium, .hp-low styles */
 
-.player-card.user { border-left: 4px solid var(--vt-c-blue); }
-.player-card.opponent { border-left: 4px solid var(--vt-c-red); }
-
-.player-card h3 {
-    margin: 0;
-    color: var(--color-heading);
-    font-size: 1.3em; /* Slightly larger name */
-    font-weight: 600;
-    line-height: 1.2;
-    /* Removed flex from h3 */
-}
-
-.player-card p { /* HP Text */
-    margin: 0;
-    text-align: right; /* Align text right within its space */
-    font-size: 0.9em;
-    color: var(--color-text);
-    font-weight: 500;
-    white-space: nowrap; 
-    flex-shrink: 0; 
-    max-width: 80px; /* Give text a max width */
-}
-
-.player-card progress {
-    width: auto; /* Let flex-grow handle the width */
-    height: 12px; 
-    flex-grow: 1; /* Make progress bar fill available space */
-    /* Appearance styles */
-    -webkit-appearance: none;
-    appearance: none; 
-    background-color: var(--color-background-soft); 
-    border: 1px solid var(--color-border); 
-    border-radius: 6px; 
-    overflow: hidden; 
-}
-
-/* Webkit progress bar track */
-progress::-webkit-progress-bar {
-    background-color: var(--color-background-soft); /* Match overall progress background */
-    border-radius: 6px;
-}
-
-/* Webkit progress bar value (the fill) */
-progress::-webkit-progress-value {
-    border-radius: 6px; 
-    transition: width 0.5s ease-in-out; /* Apply animation */
-}
-
-/* Mozilla progress bar */
-progress::-moz-progress-bar { 
-    border-radius: 6px;
-    transition: width 0.5s ease-in-out; /* Apply animation */
-}
-
-/* Color classes for HP Bar value */
-.hp-bar-user::-webkit-progress-value,
-.hp-bar-user::-moz-progress-bar {
-    background-color: var(--vt-c-blue); /* Default user color */
-}
-.hp-bar-opponent::-webkit-progress-value,
-.hp-bar-opponent::-moz-progress-bar {
-    background-color: var(--vt-c-red); /* Default opponent color */
-}
-
-/* Conditional Colors */
-progress.hp-high::-webkit-progress-value,
-progress.hp-high::-moz-progress-bar {
-    /* Keep default user/opponent color for high HP */
-}
-
-progress.hp-medium::-webkit-progress-value,
-progress.hp-medium::-moz-progress-bar {
-    background-color: var(--vt-c-yellow-darker); 
-}
-
-progress.hp-low::-webkit-progress-value,
-progress.hp-low::-moz-progress-bar {
-    background-color: var(--vt-c-red-dark); 
-}
-
-/* Ensure opponent low hp is also dark red */
-.hp-bar-opponent.hp-low::-webkit-progress-value,
-.hp-bar-opponent.hp-low::-moz-progress-bar {
-     background-color: var(--vt-c-red-dark); 
-}
-
-.vs-separator { /* Changed class name */
+.vs-separator { /* Keep this */
     font-size: 1.5em;
     font-weight: bold;
     align-self: center;
@@ -744,189 +514,37 @@ progress.hp-low::-moz-progress-bar {
     color: var(--color-text-mute);
 }
 
-.messages {
-    margin: 1.5rem 0;
-    padding: 0.5rem; 
-    min-height: 200px;
-    max-height: 400px;
-    background-color: var(--color-background);
-    border: 1px solid var(--color-border);
-    border-radius: 6px;
-    display: flex; 
-    flex-direction: column;
-    overflow-y: auto; 
-}
-
-.battle-message,
-.error-message {
-    padding: 0 0.5rem;
-    margin-bottom: 0.5rem;
-    flex-shrink: 0;
-}
-
-.turn-summary {
-    flex-grow: 1; 
+/* Keep placeholder style if needed */
+.player-card.placeholder {
+    min-width: 280px;
+    flex: 1;
+    padding: 1rem 1.5rem;
+    border: 1px dashed var(--color-border);
+    border-radius: 8px;
+    background-color: var(--color-background-mute);
     display: flex;
-    flex-direction: column;
-    padding: 0 0.5rem;
-}
-
-.turn-summary ul {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-}
-
-/* Container for each log line - uses Flex */
-.log-entry-container {
-    margin-bottom: 0.5rem;
-    display: flex; 
-}
-
-/* --- Alignment by Source --- */
-.log-entry-container.log-user {
-   justify-content: flex-start;
-}
-.log-entry-container.log-opponent {
-    justify-content: flex-end;
-}
-.log-entry-container.log-system {
-   justify-content: center;
-}
-
-/* The bubble itself */
-.log-bubble {
-    padding: 0.4rem 0.8rem; 
-    border-radius: 15px; 
-    max-width: 70%; 
-    word-wrap: break-word; 
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2); 
-    line-height: 1.3; 
-    display: inline-flex; 
+    justify-content: center;
     align-items: center;
-    gap: 0.3em;
-    border: 1px solid transparent;
-    transition: background-color 0.2s ease, color 0.2s ease;
-}
-
-/* --- Log Bubble Styling by Source --- */
-.log-entry-container.source-player1 .log-bubble,
-.log-entry-container.source-player2 .log-bubble {
-    background-color: var(--vt-c-indigo); 
-    color: white; 
-    border-bottom-left-radius: 3px;
-}
-.log-entry-container.log-opponent .log-bubble {
-     border-bottom-right-radius: 3px; 
-     border-bottom-left-radius: 15px;
-}
-
-.log-entry-container.source-script .log-bubble {
-    background-color: #5a5f89;
-    color: white;
-}
-
-.log-entry-container.source-system .log-bubble {
-    color: var(--color-text-mute);
-    background-color: transparent;
-    box-shadow: none;
+    color: var(--color-text-muted);
     font-style: italic;
-    border: none;
-    padding: 0.1rem 0.5rem;
 }
 
-.log-entry-container.source-debug .log-bubble {
-    color: #666; 
-    background-color: transparent;
-    box-shadow: none;
-    font-style: italic;
-    opacity: 0.6;
-    font-size: 0.85em;
-    padding: 0.1rem 0.5rem;
-    border: none;
+/* UPDATED: Wrapper for log section */
+.messages-section {
+    margin: 1.5rem 0;
 }
 
-/* --- Log Bubble Styling by Effect Type --- */
-.log-bubble.effect-action {
-    /* Keep player/script background */
-}
-
-/* NEW: Turn Change Separator Style */
-.log-turn-separator {
-    list-style: none; /* Remove potential bullet point */
-    height: 1px;
-    background-color: var(--color-border-hover);
-    margin: 1rem 0.5rem; /* Add vertical spacing */
-    flex-basis: 100%; /* Ensure it takes full width within flex context if needed */
-}
-
-/* NEW: Optional style to make turn change messages less prominent if desired */
-/* 
-.log-bubble.effect-turnchange {
-    background-color: transparent;
-    color: var(--color-text-mute);
-    font-style: italic;
-    font-size: 0.9em;
-    box-shadow: none;
-    border: none;
-    text-align: center; 
-    padding: 0.2rem 0.5rem;
-} 
-*/
-
-.log-bubble.effect-damage {
-    background-color: var(--vt-c-red-soft);
-    color: var(--vt-c-red-dark);
-    border-color: var(--vt-c-red);
-}
-
-.log-bubble.effect-heal {
-    background-color: var(--vt-c-green-soft);
-    color: var(--vt-c-green-dark);
-    border-color: var(--vt-c-green);
-}
-
-.log-bubble.effect-stat_change {
-    /* Style based on arrow */
-}
-
-.log-bubble.effect-status_apply,
-.log-bubble.effect-status_remove,
-.log-bubble.effect-status_effect {
-     background-color: var(--color-background-mute);
-     color: var(--color-text);
-     border-style: dashed;
-     border-color: var(--color-border-hover);
-}
-
-.log-bubble.effect-info {
-    /* Keep neutral, source styles will apply */
-    color: var(--color-text);
-}
-/* Override for system/script info */
-.log-entry-container.source-system .log-bubble.effect-info,
-.log-entry-container.source-script .log-bubble.effect-info {
-     color: var(--color-text-mute); 
-     background-color: transparent;
-     box-shadow: none;
-}
-
-.log-bubble.effect-error {
-    background-color: var(--vt-c-red-dark);
-    color: white;
-    font-weight: bold;
-    border: none;
-}
-
-.log-bubble.effect-debug {
-    /* Style already handled by source-debug */
-}
-
-/* --- Icon/Arrow Styles --- */
-.stat-arrow { display: inline-block; margin-right: 0.2em; font-weight: bold; }
-.stat-arrow.up { color: var(--vt-c-green); }
-.stat-arrow.down { color: var(--vt-c-red); }
-.log-emoji { margin-right: 0.3em; font-size: 1.1em; line-height: 1; }
+/* REMOVED: .messages styles (now in BattleLog) */
+/* REMOVED: .battle-message, .error-message positioning (handled by messages-section) */
+/* REMOVED: .turn-summary styles */
+/* REMOVED: .turn-summary ul styles */
+/* REMOVED: .log-entry-container styles */
+/* REMOVED: .log-bubble styles */
+/* REMOVED: Log source alignment styles */
+/* REMOVED: Log effect type styles */
+/* REMOVED: .log-turn-separator styles */
+/* REMOVED: .stat-arrow styles */
+/* REMOVED: .log-emoji styles */
 
 .action-selection {
     margin-top: 1.5rem;
@@ -1024,23 +642,6 @@ progress.hp-low::-moz-progress-bar {
 .concede-button:disabled {
      opacity: 0.7;
      cursor: not-allowed;
-}
-
-.stat-badges-container {
-    min-height: 20px;
-}
-
-.stat-badges {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.4rem; 
-}
-
-.hp-display {
-    display: flex; 
-    align-items: center; 
-    gap: 0.75rem; 
-    margin-top: auto; 
 }
 
 .momentum-pendulum-container {
@@ -1171,85 +772,6 @@ progress.hp-low::-moz-progress-bar {
     border-left: 2px dotted var(--color-border-hover);
     width: 0;
     z-index: 0;
-}
-
-.stat-badge {
-    display: inline-block;
-    padding: 0.2em 0.5em;
-    font-size: 0.8em;
-    font-weight: 600;
-    border-radius: 4px;
-    color: var(--vt-c-white-soft);
-    text-shadow: 1px 1px 1px rgba(0,0,0,0.3);
-}
-
-.stat-badge.badge-attack {
-    background-color: var(--vt-c-red-dark);
-}
-.stat-badge.badge-defense {
-    background-color: var(--vt-c-blue-dark);
-}
-.stat-badge.badge-speed {
-    background-color: var(--vt-c-yellow-darker);
-}
-
-.custom-statuses {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.4rem; 
-    margin-top: 0.4rem;
-}
-
-.custom-status-badge {
-    display: inline-block;
-    padding: 0.2em 0.5em;
-    font-size: 0.8em;
-    font-weight: 500;
-    border-radius: 4px;
-    text-transform: capitalize;
-    border: 1px solid transparent;
-}
-
-.player-panel {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 0.5rem;
-}
-
-.stat-stages, .custom-statuses {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: 0.4rem;
-    margin-bottom: 0.5rem;
-    min-height: 20px;
-}
-
-.stat-badge, .status-badge {
-    padding: 0.2rem 0.6rem;
-    border-radius: 12px;
-    font-size: 0.75rem;
-    font-weight: 500;
-    border: 1px solid transparent;
-}
-
-.stat-badge.stat-up {
-    background-color: rgba(76, 175, 80, 0.2);
-    color: #388E3C;
-    border-color: #388E3C;
-}
-
-.stat-badge.stat-down {
-    background-color: rgba(244, 67, 54, 0.2);
-    color: #D32F2F;
-    border-color: #D32F2F;
-}
-
-.status-badge.status-custom {
-    background-color: rgba(158, 158, 158, 0.2);
-    color: #616161;
-    border-color: #616161;
 }
 
 .battle-action-grid {

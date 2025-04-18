@@ -30,7 +30,8 @@ class UserRegisterSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         user = User.objects.create(
             username=validated_data['username'],
-            email=validated_data.get('email', '') # Handle optional email
+            email=validated_data.get('email', ''), # Handle optional email
+            booster_credits=12 # NEW: Set initial credits
         )
         user.set_password(validated_data['password'])
         # Maybe assign default stats/level here if not done in model defaults

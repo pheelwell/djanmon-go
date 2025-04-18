@@ -4,8 +4,12 @@ import { useRouter } from 'vue-router'; // Import useRouter
 import { useAuthStore } from '@/stores/auth';
 import { useGameStore } from '@/stores/game'; // Import the game store
 import MovesetManager from '@/components/MovesetManager.vue';
-import AttackCardDisplay from '@/components/AttackCardDisplay.vue';
-import UserProfileStatsEditor from '@/components/UserProfileStatsEditor.vue';
+// import AttackCardDisplay from '@/components/AttackCardDisplay.vue'; // Likely unused here now
+// import UserProfileStatsEditor from '@/components/UserProfileStatsEditor.vue'; // Now inside UserProfilePanel
+import UserProfilePanel from '@/components/UserProfilePanel.vue'; // <-- Import
+import ActiveBattleDisplay from '@/components/ActiveBattleDisplay.vue'; // <-- Import
+import IncomingChallengesList from '@/components/IncomingChallengesList.vue'; // <-- Import
+import AvailablePlayersList from '@/components/AvailablePlayersList.vue'; // <-- Import
 
 const authStore = useAuthStore();
 const gameStore = useGameStore();
@@ -91,28 +95,8 @@ function handleLogout() {
   </button>
 
   <main class="home-view">
-    <div v-if="user" class="user-panel panel">
-      <h2>{{ user.username }}\'s Quarters</h2>
-      
-      <!-- Display Booster Credits -->
-      <div class="user-currency">
-        <span class="label">💰 Credits:</span>
-        <span class="value">{{ user.booster_credits ?? 0 }}</span>
-      </div>
-
-      <!-- Basic Info Display (Stats bars removed) -->
-       <div class="user-basic-info">
-          <div class="stat-level">
-              <span class="label">LVL</span>
-              <!-- Assuming level is still a concept, adjust if not -->
-              <span class="value">{{ user.level || '1' }}</span> 
-          </div>
-      </div>
-
-      <!-- Embed Stats Editor directly -->
-      <UserProfileStatsEditor />
-
-    </div>
+    <!-- UserProfilePanel or loading state -->
+    <UserProfilePanel v-if="user" :user="user" />
     <div v-else class="panel">
       <p>Loading user profile...</p>
     </div>
@@ -122,7 +106,7 @@ function handleLogout() {
         <MovesetManager />
     </div>
 
-    <!-- Actions Panel (remains the same) -->
+    <!-- Actions Panel (UPDATED) -->
     <div class="actions-panel panel">
         <h2>Command Center</h2>
          <!-- Action Feedback -->
@@ -131,83 +115,42 @@ function handleLogout() {
             <p v-if="actionSuccessMessage" class="success-message">✅ {{ actionSuccessMessage }}</p>
         </div>
 
-        <!-- === REDESIGNED COMMAND CENTER === -->
+        <!-- === UPDATED COMMAND CENTER Structure === -->
 
-        <!-- 1. Active Battle takes priority -->
+        <!-- 1. Loading state for active battle check -->
         <div v-if="isLoadingActiveBattle" class="loading-placeholder">
             Checking battle status...
         </div>
-        <div v-else-if="activeBattle && opponent" class="active-battle-display subsection">
-            <h3>Active Battle</h3>
-            <p>You are currently battling {{ opponent.username }}.</p>
-            <button 
-                @click="goToBattle(activeBattle.id)" 
-                class="button button-primary resume-button"
-            >
-                Resume Battle
-            </button>
-        </div>
+        
+        <!-- 2. Active Battle Display -->
+        <ActiveBattleDisplay
+            v-else-if="activeBattle && opponent" 
+            :activeBattle="activeBattle"
+            :opponent="opponent"
+            @goToBattle="goToBattle"
+        />
 
-        <!-- 2. If NO active battle, show Challenges & Player List -->
-        <div v-else class="no-active-battle-layout">
-            
-            <!-- Incoming Challenges Section -->
-            <div v-if="isLoadingPendingBattles && !pendingBattles.length" class="loading-placeholder">
-                 Loading incoming challenges...
-            </div>
-             <div v-else-if="pendingBattles.length > 0" class="incoming-challenges subsection">
-                <h3>Incoming Challenges ({{ pendingBattles.length }})</h3>
-                <ul class="simple-list challenges-list"> 
-                     <li v-for="battle in pendingBattles" :key="battle.id" class="list-item-simple challenge-item">
-                        <span><strong>{{ battle.player1.username }}</strong> (Lvl {{ battle.player1.level || '1' }})</span>
-                        <div class="button-group">
-                            <button
-                                @click="handleResponse(battle.id, 'accept')"
-                                :disabled="respondingBattleId === battle.id"
-                                class="button button-accept button-small"
-                            >
-                                {{ respondingBattleId === battle.id ? '...' : 'Accept' }}
-                             </button>
-                            <button
-                                @click="handleResponse(battle.id, 'decline')"
-                                :disabled="respondingBattleId === battle.id"
-                                 class="button button-decline button-small"
-                            >
-                                 {{ respondingBattleId === battle.id ? '...' : 'Decline' }}
-                            </button>
-                        </div>
-                    </li>
-                </ul>
-            </div>
-            <div v-else class="subsection no-items-placeholder">
-                No incoming challenges.
-            </div>
+        <!-- 3. If NO active battle AND NOT loading, show Challenges & Player List -->
+        <div v-else class="no-active-battle-layout"> 
 
-            <!-- Available Players Section -->
-            <div v-if="isLoadingUsers && !availableUsers.length" class="loading-placeholder">
-                Loading available players...
-            </div>
-             <div v-else-if="availableUsers.length > 0" class="available-players subsection">
-                <h3>Challenge a Player</h3>
-                <ul class="simple-list players-list">
-                    <li v-for="player in availableUsers" :key="player.id" class="list-item-simple player-item">
-                        <span>{{ player.username }} (Lvl {{ player.level || '1' }})</span>
-                        <button
-                            @click="handleChallenge(player.id)"
-                            :disabled="challengingUserId === player.id"
-                            class="button button-secondary button-small challenge-button"
-                         >
-                            {{ challengingUserId === player.id ? 'Sending...' : 'Challenge' }}
-                        </button>
-                    </li>
-                </ul>
-            </div>
-             <div v-else class="subsection no-items-placeholder">
-                No other players available to challenge.
-            </div>
+            <!-- Incoming Challenges Section - Use Component -->
+            <IncomingChallengesList
+                :isLoading="isLoadingPendingBattles"
+                :battles="pendingBattles"
+                :respondingBattleId="respondingBattleId"
+                @respond="handleResponse"
+            />
+
+            <!-- Available Players Section - Use Component -->
+            <AvailablePlayersList
+                :isLoading="isLoadingUsers"
+                :players="availableUsers"
+                :challengingUserId="challengingUserId"
+                @challenge="handleChallenge"
+            />
 
         </div>
-        <!-- === END REDESIGNED COMMAND CENTER === -->
+        <!-- === END UPDATED COMMAND CENTER === -->
 
     </div>
     
@@ -240,16 +183,20 @@ function handleLogout() {
       "user actions"
       "moveset moveset"; /* Moveset spans both columns */
   }
-  .user-panel { grid-area: user; }
+  .user-panel-component { grid-area: user; }
   /* .stats-editor-panel removed */
   .moveset-manager-panel { grid-area: moveset; }
   .actions-panel { grid-area: actions; }
 }
 
-.panel { /* ... existing styles ... */ }
-.user-panel { /* ... existing styles ... */
-    position: relative; /* For positioning logout button */
+.panel { /* Keep general panel styles */
+    background-color: var(--color-background-soft);
+    padding: 1.5rem;
+    border-radius: 8px;
+    border: 1px solid var(--color-border);
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
 }
+
 .actions-panel {
     display: flex;
     flex-direction: column;
@@ -257,6 +204,7 @@ function handleLogout() {
 }
 
 .actions-panel h2 {
+    margin-top: 0; /* Added to reset */
     margin-bottom: 0; /* Reduce default bottom margin */
 }
 
@@ -265,54 +213,33 @@ function handleLogout() {
      order: -1; /* Keep feedback at top */
 }
 
-/* Styles for the redesigned sections */
-.subsection {
-    padding: 1rem 1.5rem;
-    border-radius: 8px;
-    border: 1px solid var(--color-border);
-    background-color: var(--color-background-mute); 
+.error-message, .success-message { /* Basic styling for feedback messages */
+    padding: 0.8rem 1rem;
+    border-radius: 6px;
+    font-weight: 500;
+    text-align: center;
+    margin-bottom: 1rem; /* Space below message if present */
+}
+.error-message {
+  background-color: var(--vt-c-red-soft);
+  color: var(--vt-c-red-dark);
+  border: 1px solid var(--vt-c-red);
+}
+.success-message {
+  background-color: var(--vt-c-green-soft);
+  color: var(--vt-c-green-dark);
+  border: 1px solid var(--vt-c-green);
 }
 
-.subsection h3 {
-    margin-top: 0;
-    margin-bottom: 1rem;
-    font-size: 1.1em;
-    color: var(--color-heading);
-    border-bottom: 1px solid var(--color-border-hover);
-    padding-bottom: 0.5rem;
-}
-
-.loading-placeholder,
-.no-items-placeholder {
+/* Generic Loading Placeholder style */
+.loading-placeholder {
     padding: 1.5rem;
     text-align: center;
     color: var(--color-text-mute);
     font-style: italic;
     border-radius: 8px;
     border: 1px dashed var(--color-border);
-    margin-top: 1rem; /* Add some space */
-}
-
-.active-battle-display {
-    text-align: center;
-    background-color: var(--color-primary-soft); /* Highlight active battle */
-    border-color: var(--color-primary);
-}
-
-.active-battle-display h3 {
-    color: var(--color-primary-dark);
-    border-bottom: none;
-    margin-bottom: 0.5rem;
-}
-
-.active-battle-display p {
-    margin: 0 0 1rem 0;
-    color: var(--color-text);
-}
-
-.resume-button {
-    width: auto; /* Don't force full width */
-    display: inline-block;
+    /* margin-top: 1rem; Removed */
 }
 
 .no-active-battle-layout {
@@ -321,46 +248,7 @@ function handleLogout() {
     gap: 1.5rem; /* Space between challenges and players */
 }
 
-.incoming-challenges {
-    /* Optional: slightly different background/border if desired */
-    /* background-color: var(--color-background-soft); */
-}
-
-.available-players {
-     /* Optional: slightly different background/border if desired */
-}
-
-/* List styles */
-.simple-list {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-    max-height: 300px; /* Limit height */
-    overflow-y: auto; 
-}
-
-.list-item-simple {
-   display: flex;
-   justify-content: space-between;
-   align-items: center;
-   padding: 0.6rem 0.2rem; /* Adjust padding */
-   margin-bottom: 0.3rem;
-   border-bottom: 1px solid var(--color-border-hover);
-}
-.list-item-simple:last-child {
-    border-bottom: none;
-}
-
-.list-item-simple span strong {
-    color: var(--color-heading);
-}
-
-.list-item-simple .button-group {
-     display: flex;
-     gap: 0.5rem;
-}
-
-/* NEW Style for fixed logout button */
+/* Keep fixed logout button style */
 .logout-button-fixed {
     position: fixed;
     top: 1.5rem; /* Adjust spacing from top */
