@@ -1,0 +1,28 @@
+                          List of relations
+ Schema |               Name                | Type  |     Owner      
+--------+-----------------------------------+-------+----------------
+ public | account_emailconfirmation         | table | djanmongo_user
+ public | auth_group                        | table | djanmongo_user
+ public | auth_group_permissions            | table | djanmongo_user
+ public | auth_permission                   | table | djanmongo_user
+ public | django_admin_log                  | table | djanmongo_user
+ public | django_content_type               | table | djanmongo_user
+ public | django_migrations                 | table | djanmongo_user
+ public | django_session                    | table | djanmongo_user
+ public | django_site                       | table | djanmongo_user
+ public | game_attack                       | table | djanmongo_user
+ public | game_battle                       | table | djanmongo_user
+ public | game_battleplayer1attackselection | table | djanmongo_user
+ public | game_battleplayer2attackselection | table | djanmongo_user
+ public | game_script                       | table | djanmongo_user
+ public | socialaccount_socialaccount       | table | djanmongo_user
+ public | socialaccount_socialapp           | table | djanmongo_user
+ public | socialaccount_socialapp_sites     | table | djanmongo_user
+ public | socialaccount_socialtoken         | table | djanmongo_user
+ public | users_user                        | table | djanmongo_user
+ public | users_user_attacks                | table | djanmongo_user
+ public | users_user_groups                 | table | djanmongo_user
+ public | users_user_selected_attacks       | table | djanmongo_user
+ public | users_user_user_permissions       | table | djanmongo_user
+(23 rows)
+

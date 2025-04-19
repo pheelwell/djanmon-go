@@ -20,12 +20,26 @@ const props = defineProps({
   },
   playerType: {
     type: String, // 'user' or 'opponent'
-    required: true
+    default: 'user'
   },
   isCurrentUser: {
     type: Boolean,
     default: false
   }
+});
+
+// Calculate HP percentage
+const hpPercentage = computed(() => {
+  if (!props.player || !props.player.hp || props.player.hp === 0) return 0;
+  return Math.max(0, (props.currentHp / props.player.hp) * 100);
+});
+
+// Determine HP bar class based on percentage
+const hpBarClass = computed(() => {
+  const percentage = hpPercentage.value;
+  if (percentage > 60) return 'hp-bar-high';
+  if (percentage > 30) return 'hp-bar-medium';
+  return 'hp-bar-low';
 });
 
 // --- Formatting Helpers ---
@@ -89,7 +103,7 @@ const cardClasses = computed(() => [
 
 <template>
   <div :class="cardClasses">
-      <h3>{{ player?.username }} <span v-if="isCurrentUser">(You)</span></h3>
+      <h3>{{ player?.username }} <span v-if="player.is_bot" class="bot-label">(BOT)</span></h3>
       <div class="stat-badges-container">
           <!-- Stat Stages -->
           <span class="stat-badges">
@@ -118,7 +132,7 @@ const cardClasses = computed(() => [
          <progress
             :value="currentHp"
             :max="player?.hp"
-            :class="getHpBarClass(currentHp, player?.hp, playerType)"
+            :class="hpBarClass"
         ></progress>
       </div>
   </div>
@@ -265,5 +279,12 @@ progress.hp-low::-moz-progress-bar {
     align-items: center;
     gap: 0.75rem;
     margin-top: auto; /* Pushes HP to bottom */
+}
+
+.bot-label {
+    font-weight: normal;
+    font-size: 0.8em;
+    color: var(--color-text-muted);
+    margin-left: 0.3em;
 }
 </style> 

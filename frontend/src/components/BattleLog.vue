@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch, nextTick } from 'vue';
+import { ref, watch, nextTick, onMounted, onBeforeUnmount } from 'vue';
 
 const props = defineProps({
   logEntries: {
@@ -17,21 +17,69 @@ const props = defineProps({
 });
 
 const battleLogContainer = ref(null);
+const userScrolledUp = ref(false); // Track if user manually scrolled up
 
-// Function to scroll log to bottom
-function scrollLogToBottom() {
+// Function to handle user scroll
+function handleScroll() {
+    const container = battleLogContainer.value;
+    if (!container) return;
+    // Check if user is scrolled near the bottom
+    const threshold = 20; // Pixels from bottom to consider "at bottom"
+    const atBottom = container.scrollHeight - container.scrollTop - container.clientHeight <= threshold;
+    userScrolledUp.value = !atBottom;
+}
+
+// Function to scroll log to bottom if needed
+function scrollToBottomIfNeeded(force = false) {
   nextTick(() => {
     const container = battleLogContainer.value;
     if (container) {
-      container.scrollTop = container.scrollHeight;
+        // Only scroll down if user hasn't manually scrolled up, or if forced (initial load)
+        if (!userScrolledUp.value || force) {
+            container.scrollTop = container.scrollHeight;
+        }
     }
   });
 }
 
-// Watch for new log entries and scroll down
+// Watch for new log entries
 watch(() => props.logEntries, (newLog, oldLog) => {
-    scrollLogToBottom();
-}, { deep: true, immediate: true }); // Scroll immediately on mount too
+    // Determine if the scroll should happen *before* nextTick captures the current state
+    const container = battleLogContainer.value;
+    let shouldScroll = false;
+    if (container) {
+        const threshold = 20;
+        const atBottomBeforeUpdate = container.scrollHeight - container.scrollTop - container.clientHeight <= threshold;
+        shouldScroll = atBottomBeforeUpdate;
+    }
+
+    // Wait for DOM update, then scroll if user was at bottom
+    nextTick(() => {
+        const updatedContainer = battleLogContainer.value;
+        if (updatedContainer && shouldScroll) {
+            updatedContainer.scrollTop = updatedContainer.scrollHeight;
+            userScrolledUp.value = false; // Reset flag after auto-scroll
+        }
+    });
+}, { deep: true }); // Don't use immediate: true, handle initial scroll in onMounted
+
+// Add scroll listener on mount
+onMounted(() => {
+    const container = battleLogContainer.value;
+    if (container) {
+        container.addEventListener('scroll', handleScroll, { passive: true });
+    }
+    // Scroll to bottom on initial load
+    scrollToBottomIfNeeded(true); // Force scroll on mount
+});
+
+// Remove listener on unmount
+onBeforeUnmount(() => {
+    const container = battleLogContainer.value;
+    if (container) {
+        container.removeEventListener('scroll', handleScroll);
+    }
+});
 
 </script>
 

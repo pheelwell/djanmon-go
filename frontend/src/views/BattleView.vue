@@ -244,6 +244,9 @@ const currentTurnMomentum = computed(() => {
 
 // --- END Pendulum Logic ---
 
+// Helper delay function
+const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+
 // --- Methods ---
 async function fetchBattleData() {
     isLoading.value = true;
@@ -262,10 +265,39 @@ async function fetchBattleData() {
 
 async function submitAction() {
     if (!selectedAttackId.value || !battle.value || !canAct.value) return;
+    
     submittingAction.value = true;
-    await gameStore.submitBattleAction(battle.value.id, selectedAttackId.value);
-    selectedAttackId.value = null; // Reset selection after submitting
-    submittingAction.value = false;
+    const initialPlayerRole = userPlayerRole.value; // Store who acted
+    const opponentIsBot = opponentPlayer.value?.is_bot;
+
+    try {
+        // The store action handles updating the battle state
+        await gameStore.submitBattleAction(battle.value.id, selectedAttackId.value);
+
+        // Check the state *after* the action is complete
+        const finalBattleState = gameStore.activeBattle; // Get the updated state
+
+        // --- Add Delay Logic ---
+        // Check if the opponent is a bot AND either:
+        // 1. The turn switched away from the initial player 
+        //    (meaning the opponent, the bot, potentially took a turn)
+        // 2. The battle ended (meaning the bot might have taken the final turn)
+        const turnSwitched = finalBattleState && finalBattleState.whose_turn !== initialPlayerRole;
+        const battleEnded = finalBattleState && finalBattleState.status === 'finished';
+
+        if (opponentIsBot && (turnSwitched || battleEnded)) {
+            console.log('Bot acted, adding frontend delay...');
+            await delay(2000); // Wait for 2 seconds
+        }
+        // --- End Delay Logic ---
+
+    } catch (error) {
+        // Error is already handled by the store, just log maybe
+        console.error("Error during battle action submission:", error);
+    } finally {
+        selectedAttackId.value = null; // Reset selection
+        submittingAction.value = false; // Re-enable controls
+    }
 }
 
 async function handleConcede() {

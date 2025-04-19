@@ -30,7 +30,9 @@ function handleChallenge(playerId) {
       <h3>Challenge a Player</h3>
       <ul class="simple-list players-list">
           <li v-for="player in players" :key="player.id" class="list-item-simple player-item">
-              <span>{{ player.username }} (Lvl {{ player.level || '1' }})</span>
+              <span>{{ player.username }}
+                <span v-if="player.is_bot" class="bot-label">(BOT)</span>
+                (Lvl {{ player.level || '1' }})</span>
               <button
                   @click="handleChallenge(player.id)"
                   :disabled="challengingUserId === player.id"
@@ -130,6 +132,13 @@ function handleChallenge(playerId) {
 
 .challenge-button {
     /* Add specific styles if needed */
+}
+
+.bot-label {
+  font-weight: normal;
+  font-size: 0.9em;
+  color: var(--color-text-mute);
+  margin-left: 0.3em;
 }
 
 </style> 

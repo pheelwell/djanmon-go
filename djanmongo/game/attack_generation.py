@@ -25,6 +25,8 @@ ALLOWED_LUA_PATTERNS_TO_BLOCK = ['os.', 'io.', 'package.', 'require', '_G', 'loa
 ALLOWED_TAGS = []
 ALLOWED_ATTRIBUTES = {}
 
+# --- Constants ---
+BOOSTER_GENERATION_COST = 6 # Define the fixed cost here
 
 def construct_generation_prompt(concept_text: str, favorite_attacks: Optional[List[Attack]] = None) -> str:
     """Constructs the detailed prompt for the Gemini API."""
@@ -33,7 +35,7 @@ def construct_generation_prompt(concept_text: str, favorite_attacks: Optional[Li
     favorites_section = ""
     if favorite_attacks:
         favorites_list = "\n".join([f"- \"{attack.name}\": {attack.description}" for attack in favorite_attacks])
-        favorites_section = (f"""\
+        favorites_section = (f"""
 
 ## Favorite Attacks (Inspiration):
 Consider the following attacks (provided by the user as favorites) as inspiration for the theme and mechanics of the new attacks.
@@ -421,7 +423,7 @@ def call_gemini_api(prompt: str) -> str | None:
             # Log this properly instead of just printing
             return None
         
-        model = genai.GenerativeModel('gemini-2.5-flash-preview-04-17')
+        model = genai.GenerativeModel('gemini-2.0-flash')
         response = model.generate_content(prompt)
         llm_response_text = response.text
 
@@ -432,8 +434,11 @@ def call_gemini_api(prompt: str) -> str | None:
             llm_response_text = llm_response_text.strip()[3:-3].strip()
 
         # Preprocess LLM response to fix invalid JSON escapes
-        llm_response_text_fixed = llm_response_text.replace("\'", "'")
-        
+        # Replace literal newlines within strings with escaped newlines
+        llm_response_text_fixed = llm_response_text.replace('\\n', '\\\\n')
+        # Optional: Fix single quotes if necessary (might not be needed after newline fix)
+        llm_response_text_fixed = llm_response_text_fixed.replace("\\'", "\\\\'")
+
         return llm_response_text_fixed
 
     except genai.types.generation_types.BlockedPromptException as bpe:
@@ -455,26 +460,33 @@ def process_and_save_generated_attacks(generated_data: list, user: User) -> list
     Validates, sanitizes, and saves generated attack data to the database,
     associating them with the user.
     Returns a list of the successfully created Attack model instances.
+    Raises ValueError if the user does not have enough credits.
     """
+    # --- Check and Deduct Credits UPFRONT --- 
+    if user.booster_credits < BOOSTER_GENERATION_COST:
+        print(f"Error: User {{user.username}} has insufficient credits ({{user.booster_credits}} / {{BOOSTER_GENERATION_COST}} needed).")
+        raise ValueError("Insufficient booster credits.")
+    
+    # Deduct credits before processing/saving anything else
+    user.booster_credits -= BOOSTER_GENERATION_COST
+    # Save immediately to prevent issues if generation partially fails
+    # Consider transaction management if you want atomicity
+    user.save(update_fields=["booster_credits"])
+    print(f"Deducted {{BOOSTER_GENERATION_COST}} credits from {{user.username}}. New balance: {{user.booster_credits}}")
+
+    # --- Process Attacks --- 
     created_attacks = []
     if not isinstance(generated_data, list):
         print(f"Error: LLM output was not a list. Raw data type: {type(generated_data)}")
         raise ValueError("LLM output was not in the expected list format.")
     
-    # Optional: Check count if strictly required
-    # if len(generated_data) != 6:
-    #     print(f"Warning: LLM output did not contain exactly 6 attacks. Count: {len(generated_data)}. Trying to process.")
-    
     for attack_data in generated_data:
-        # --- Validation Logic Copied from views.py --- 
+        # --- Validation: Basic Structure ---
         if not isinstance(attack_data, dict) or not all(k in attack_data for k in ('name', 'description', 'emoji', 'momentum_cost', 'script')):
             print(f"Warning: Skipping attack data due to missing keys or invalid format: {attack_data}")
             continue
-        if not isinstance(attack_data['script'], dict) or not all(k in attack_data['script'] for k in ('trigger_type', 'lua_code')):
-            print(f"Warning: Skipping attack data due to invalid script structure: {attack_data}")
-            continue
 
-        # Sanitize Text Fields
+        # --- Validation: Sanitize Text Fields ---
         s_name = bleach.clean(str(attack_data['name'])[:50], tags=ALLOWED_TAGS, attributes=ALLOWED_ATTRIBUTES).strip()
         s_description = bleach.clean(str(attack_data['description'])[:150], tags=ALLOWED_TAGS, attributes=ALLOWED_ATTRIBUTES).strip()
         s_emoji = bleach.clean(str(attack_data['emoji'])[:5], tags=ALLOWED_TAGS, attributes=ALLOWED_ATTRIBUTES).strip()
@@ -483,7 +495,7 @@ def process_and_save_generated_attacks(generated_data: list, user: User) -> list
             print(f"Warning: Skipping attack data due to empty name/description after sanitation: {attack_data}")
             continue
 
-        # Validate Numeric Fields
+        # --- Validation: Numeric Fields ---
         try:
             momentum_cost = int(attack_data['momentum_cost'])
             if not (1 <= momentum_cost <= 100):
@@ -492,19 +504,47 @@ def process_and_save_generated_attacks(generated_data: list, user: User) -> list
             print(f"Warning: Skipping attack '{s_name}' due to invalid momentum cost: {attack_data['momentum_cost']}")
             continue
 
-        # Validate Trigger
-        trigger_type = attack_data['script']['trigger_type']
-        if trigger_type not in ALLOWED_TRIGGERS or trigger_type not in TRIGGER_FIELD_MAP:
-            print(f"Warning: Skipping attack '{s_name}' due to invalid/disallowed trigger type: {trigger_type}")
+        # --- Validation: Process Scripts (Single or List) ---
+        script_input = attack_data['script']
+        scripts_to_create = [] # List to hold validated script dicts ({trigger_type, lua_code})
+
+        if isinstance(script_input, dict):
+            # Handle single script object
+            scripts_to_create.append(script_input)
+        elif isinstance(script_input, list):
+            # Handle list of script objects
+            scripts_to_create.extend(script_input)
+        else:
+            print(f"Warning: Skipping attack '{s_name}' due to invalid script field type (expected dict or list): {type(script_input)}")
             continue
 
-        # Sanitize/Validate Lua Code (Basic)
-        lua_code = str(attack_data['script']['lua_code'])
-        if any(disallowed in lua_code for disallowed in ALLOWED_LUA_PATTERNS_TO_BLOCK):
-            print(f"Warning: Skipping attack '{s_name}' due to potentially unsafe Lua patterns.")
-            continue
+        # Validate each script part found
+        validated_scripts = []
+        is_valid_attack = True
+        for script_part in scripts_to_create:
+            if not isinstance(script_part, dict) or not all(k in script_part for k in ('trigger_type', 'lua_code')):
+                print(f"Warning: Skipping attack '{s_name}' due to invalid script part structure: {script_part}")
+                is_valid_attack = False
+                break # Stop processing this attack if any part is invalid
 
-        # Prevent duplicates by name
+            trigger_type = script_part['trigger_type']
+            if trigger_type not in ALLOWED_TRIGGERS or trigger_type not in TRIGGER_FIELD_MAP:
+                print(f"Warning: Skipping attack '{s_name}' due to invalid/disallowed trigger type in script part: {trigger_type}")
+                is_valid_attack = False
+                break
+
+            lua_code = str(script_part['lua_code'])
+            if any(disallowed in lua_code for disallowed in ALLOWED_LUA_PATTERNS_TO_BLOCK):
+                print(f"Warning: Skipping attack '{s_name}' due to potentially unsafe Lua patterns in script part.")
+                is_valid_attack = False
+                break
+            
+            validated_scripts.append({'trigger_type': trigger_type, 'lua_code': lua_code})
+
+        if not is_valid_attack or not validated_scripts:
+            continue # Move to next attack if validation failed
+
+        # --- Validation: Check for Duplicate Name ---
         unique_attack_name = s_name
         counter = 1
         while Attack.objects.filter(name=unique_attack_name).exists():
@@ -516,48 +556,53 @@ def process_and_save_generated_attacks(generated_data: list, user: User) -> list
                 break
         if not unique_attack_name:
             continue
-        
-        # --- Create Database Objects --- 
+
+        # --- Create Database Objects ---
+        attack_instance = None
         try:
-            attack = Attack.objects.create(
+            attack_instance = Attack.objects.create(
                 name=unique_attack_name,
                 description=s_description,
                 emoji=s_emoji,
                 momentum_cost=momentum_cost
             )
 
-            script_triggers = {field: False for field in TRIGGER_FIELD_MAP.values()}
-            script_triggers[TRIGGER_FIELD_MAP[trigger_type]] = True
+            # Create Script objects from validated list
+            for script_data in validated_scripts:
+                script_triggers = {field: False for field in TRIGGER_FIELD_MAP.values()}
+                script_triggers[TRIGGER_FIELD_MAP[script_data['trigger_type']]] = True
 
-            Script.objects.create(
-                attack=attack,
-                name=f"{unique_attack_name} Script",
-                lua_code=lua_code,
-                **script_triggers
-            )
+                # Unescape the lua_code before saving
+                unescaped_lua_code = script_data['lua_code'].replace('\\\\n', '\n')
+                unescaped_lua_code = unescaped_lua_code.replace('\\n', '\n')
+                unescaped_lua_code = unescaped_lua_code.replace("\\\\'", "\\'")
 
-            created_attacks.append(attack)
+                Script.objects.create(
+                    attack=attack_instance,
+                    name=f"{unique_attack_name} Script ({script_data['trigger_type']})", # More specific name
+                    lua_code=unescaped_lua_code,
+                    **script_triggers
+                )
+
+            created_attacks.append(attack_instance) # Add AFTER all scripts are created successfully
 
         except Exception as db_e:
             print(f"Error creating DB objects for attack '{unique_attack_name}': {db_e}")
-            if 'attack' in locals() and hasattr(attack, 'pk') and attack.pk:
-                 attack.delete() # Attempt cleanup
-            continue
-            
-    # --- Associate with User --- 
+            # Attempt cleanup if attack was created but scripts failed
+            if attack_instance and attack_instance.pk:
+                 print(f"Attempting to delete partially created attack: {{attack_instance.pk}}")
+                 attack_instance.delete()
+            continue # Skip this attack on DB error, move to next generated attack
+
+    # --- Associate Successfully Created Attacks with User ---
     if created_attacks:
-        credits_to_deduct = len(created_attacks)
-        if user.booster_credits >= credits_to_deduct:
-            user.booster_credits -= credits_to_deduct
-            user.attacks.add(*created_attacks)
-            user.save() # Save user after deducting credits and adding attacks
-            print(f"Deducted {credits_to_deduct} credits from {user.username}. New balance: {user.booster_credits}")
-        else:
-            print(f"Warning: User {user.username} has insufficient credits ({user.booster_credits}) to pay for {credits_to_deduct} generated attacks. Attacks were still granted.")
-            # Decide if you want to still grant the attacks if they can't pay.
-            # For now, we grant them but log a warning.
-            user.attacks.add(*created_attacks)
-            user.save() # Still save the M2M relationship change
-        user.refresh_from_db() # Ensure the user object reflects changes if needed later
+        user.attacks.add(*created_attacks)
+        # User credits were already saved, no need to save again here unless other fields changed.
+        print(f"Successfully added {{len(created_attacks)}} attacks to {{user.username}}.")
+    else:
+        print(f"No attacks were successfully created or saved for {{user.username}} despite credit deduction.")
+        # Consider if you need specific logging or handling here
+    
+    user.refresh_from_db() # Ensure the user object reflects M2M changes if needed later
     
     return created_attacks 

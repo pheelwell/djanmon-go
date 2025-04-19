@@ -43,7 +43,7 @@ class BasicUserSerializer(serializers.ModelSerializer):
     """A very basic serializer for listing users"""
     class Meta:
         model = User
-        fields = ('id', 'username', 'level')
+        fields = ('id', 'username', 'level', 'is_bot')
 
 class UserProfileSerializer(serializers.ModelSerializer):
     # Use a SerializerMethodField to avoid circular import
@@ -51,7 +51,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ('id', 'username', 'level', 'hp', 'attack', 'defense', 'speed', 'attacks')
+        fields = ('id', 'username', 'level', 'hp', 'attack', 'defense', 'speed', 'attacks', 'is_bot')
         read_only_fields = fields
 
     def get_attacks(self, user_instance):
@@ -70,10 +70,15 @@ class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = (
-            'id', 'username', 'level', 'hp', 'attack', 'defense', 'speed',
-            'attacks', 'selected_attacks', 'booster_credits'
+            'id', 'username', 'level', 
+            'hp', 'attack', 'defense', 'speed',
+            'attacks', 'selected_attacks', 'booster_credits', 'is_bot'
         )
-        read_only_fields = ('id', 'username', 'level', 'hp', 'attack', 'defense', 'speed', 'attacks', 'selected_attacks', 'booster_credits')
+        read_only_fields = (
+            'id', 'username', 'level', 
+            'hp', 'attack', 'defense', 'speed'
+            'attacks', 'selected_attacks', 'booster_credits', 'is_bot'
+        )
 
     def get_attacks(self, user_instance):
         # Moved import inside method
@@ -173,6 +178,7 @@ class LeaderboardUserSerializer(serializers.ModelSerializer):
             'level', 
             'total_wins', 
             'selected_attacks',
+            'is_bot',
         )
 
     def get_total_wins(self, user_instance):

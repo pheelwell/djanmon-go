@@ -59,14 +59,31 @@ class InitiateBattleView(views.APIView):
             # Check if player1 already has an active battle
             if Battle.objects.filter(Q(player1=player1) | Q(player2=player1), status='active').exists():
                  return Response({"error": "You are already in an active battle."}, status=status.HTTP_400_BAD_REQUEST)
-             # Check if player2 already has an active battle
+             # Check if player2 already has an active battle (even if bot, maybe shouldn't auto-accept if busy?)
             if Battle.objects.filter(Q(player1=player2) | Q(player2=player2), status='active').exists():
+                 # Keep this check for bots too for now - prevents challenging a bot already in a fight
                  return Response({"error": "Opponent is already in an active battle."}, status=status.HTTP_400_BAD_REQUEST)
 
-
+            # Create the battle initially as pending
             battle = Battle.objects.create(player1=player1, player2=player2, status='pending')
-            battle_serializer = BattleListSerializer(battle) # Use simpler serializer for response
-            return Response(battle_serializer.data, status=status.HTTP_201_CREATED)
+            
+            # --- BOT AUTO-ACCEPT LOGIC ---
+            if player2.is_bot:
+                print(f"Challenge initiated against BOT {player2.username}. Auto-accepting.")
+                battle.status = 'active'
+                battle.initialize_battle_state() # This also saves the battle
+                # Use the full BattleSerializer for the response as the battle is active
+                battle_serializer = BattleSerializer(battle, context={'request': request})
+                return Response({
+                    "message": f"Battle with {player2.username} (BOT) started immediately!",
+                    "battle": battle_serializer.data # Return full battle state
+                }, status=status.HTTP_201_CREATED)
+            else:
+                # Human opponent: Keep status as pending, return simpler response
+                battle_serializer = BattleListSerializer(battle) # Use simpler serializer for pending
+                return Response(battle_serializer.data, status=status.HTTP_201_CREATED)
+            # --- END BOT AUTO-ACCEPT --- 
+
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
@@ -162,69 +179,103 @@ class BattleActionView(views.APIView):
         user = request.user
         serializer = BattleActionSerializer(data=request.data)
 
-        # Get user role (player1 or player2)
         role = battle.get_player_role(user)
         if not role:
             return Response({"error": "You are not part of this battle."}, status=status.HTTP_403_FORBIDDEN)
-
-        # Check battle status
         if battle.status != 'active':
             return Response({"error": "Battle is not active."}, status=status.HTTP_400_BAD_REQUEST)
-        
-        # Check if it's the user's turn
         if battle.whose_turn != role:
             return Response({"error": "It's not your turn!"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Validate serializer and attack
         if serializer.is_valid():
             attack_id = serializer.validated_data["attack_id"]
-            
-            # --- CORRECTED ATTACK VALIDATION ---
-            # Get the correct battle-specific attack list based on the user's role
             if role == 'player1':
                 battle_attack_list = battle.battle_attacks_player1
             else: # role == 'player2'
                 battle_attack_list = battle.battle_attacks_player2
-
             try:
-                # Check if the attack exists in the BATTLE's list for this player
                 attack = battle_attack_list.get(pk=attack_id)
             except Attack.DoesNotExist:
-                # Use a more specific error message
                 return Response({"error": f"Invalid action: Attack ID {attack_id} not available in this battle for {role}."}, status=status.HTTP_400_BAD_REQUEST)
-            # --- END CORRECTION ---
 
-            # --- Apply Attack using new logic ---
+            # --- Apply Player Attack ---
             try:
-                log_entries, battle_ended = apply_attack(battle, user, attack)
+                _, battle_ended = apply_attack(battle, user, attack)
             except ValueError as e:
-                 # Catch validation errors from apply_attack (e.g., wrong turn - though already checked)
                 return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
-            # --- Respond with updated battle state ---
-            # The battle object is modified and saved within apply_attack
-            # Pass request context to the serializer
-            updated_battle_state = BattleSerializer(battle, context={'request': request}).data
+            # --- BEGIN BOT TURN LOGIC ---
+            while not battle_ended and battle.status == 'active':
+                current_turn_role = battle.whose_turn
+                if current_turn_role == 'player1':
+                    current_player = battle.player1
+                    bot_attack_list = battle.battle_attacks_player1.all()
+                else: # player2
+                    current_player = battle.player2
+                    bot_attack_list = battle.battle_attacks_player2.all()
 
+                if not current_player.is_bot:
+                    break # Exit loop if it's a human's turn
+
+                # --- It's a Bot's Turn ---
+                print(f"[Battle {battle.id}] Bot {current_player.username}'s turn...")
+                if not bot_attack_list:
+                    print(f"Warning: Bot {current_player.username} (Role: {current_turn_role}) in Battle {battle.id} has no attacks. Skipping turn.")
+                    original_turn = battle.whose_turn
+                    battle.whose_turn = 'player1' if current_turn_role == 'player2' else 'player2'
+                    if battle.whose_turn != original_turn:
+                        battle.turn_number += 1
+                    if not isinstance(battle.last_turn_summary, list): battle.last_turn_summary = []
+                    battle.last_turn_summary.append({
+                        "source": "system",
+                        "text": f"{current_player.username} (BOT) has no moves and skips the turn.",
+                        "effect_type": "info"
+                    })
+                    battle.save()
+                    break
+
+                bot_chosen_attack = random.choice(list(bot_attack_list))
+                print(f"  Bot chose attack: {bot_chosen_attack.name} (ID: {bot_chosen_attack.id})")
+
+                try:
+                    # Apply the bot's attack
+                    _, bot_battle_ended = apply_attack(battle, current_player, bot_chosen_attack)
+                    battle_ended = bot_battle_ended # Update overall status
+                except ValueError as e:
+                    print(f"Error during bot {current_player.username}'s turn in Battle {battle.id}: {e}")
+                    if not isinstance(battle.last_turn_summary, list): battle.last_turn_summary = []
+                    battle.last_turn_summary.append({
+                        "source": "system",
+                        "text": f"Error processing bot {current_player.username}'s turn: {e}",
+                        "effect_type": "error"
+                    })
+                    original_turn = battle.whose_turn
+                    battle.whose_turn = 'player1' if current_turn_role == 'player2' else 'player2'
+                    if battle.whose_turn != original_turn:
+                        battle.turn_number += 1
+                    battle.save()
+                    break
+            # --- END BOT TURN LOGIC ---
+
+            # --- Respond with final battle state ---
+            updated_battle_state = BattleSerializer(battle, context={'request': request}).data
             if battle_ended:
                 return Response({
                     "message": "Battle finished!",
                     "battle_state": updated_battle_state
                 }, status=status.HTTP_200_OK)
             else:
-                # Determine message based on whose turn it is now
                 message = "Action applied. "
-                if battle.whose_turn == role: # Turn didn't switch
-                    message += "It's still your turn."
-                else: # Turn switched
-                    opponent = battle.player1 if role == 'player2' else battle.player2
+                final_turn_role = battle.whose_turn
+                if final_turn_role == role:
+                    message += "It's your turn!"
+                else:
+                    opponent = battle.player1 if final_turn_role == 'player1' else battle.player2
                     message += f"Waiting for {opponent.username}."
-                
                 return Response({
                     "message": message,
                     "battle_state": updated_battle_state
                  }, status=status.HTTP_200_OK)
-        
         # Serializer invalid
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 

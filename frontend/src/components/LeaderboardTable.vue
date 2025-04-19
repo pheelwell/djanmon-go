@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 // Use AttackCardDisplay for the popup content
 import AttackCardDisplay from '@/components/AttackCardDisplay.vue';
 
@@ -17,29 +17,51 @@ const props = defineProps({
 // State for hover card
 const hoveredAttack = ref(null); // Will hold the attack object being hovered
 const hoverCardStyle = ref({}); // Holds position style for the card
+const hoverTimeoutId = ref(null); // Timeout for delayed hide
 
 // Hover handlers
 function handleMouseEnter(attack, event) {
-  // console.log('Mouse Enter:', attack.name);
+  if (hoverTimeoutId.value) {
+    clearTimeout(hoverTimeoutId.value);
+    hoverTimeoutId.value = null;
+  }
   hoveredAttack.value = attack;
-  // Position card slightly below and to the right of the triggering element
+  // Calculate position based on the triggering element (e.g., the emoji span)
   const rect = event.target.getBoundingClientRect();
   hoverCardStyle.value = {
-    left: `${rect.left + window.scrollX}px`,
-    top: `${rect.bottom + window.scrollY + 5}px`, // 5px offset below
+    // Position below and slightly offset from the element
+    left: `${rect.left + window.scrollX}px`, 
+    top: `${rect.bottom + window.scrollY + 8}px`, // 8px offset below
     opacity: 1,
-    transform: 'translateY(0)'
+    transform: 'translateY(0)',
+    visibility: 'visible' // Ensure it's visible
   };
 }
 
 function handleMouseLeave() {
-  // console.log('Mouse Leave');
-  hoveredAttack.value = null;
-  hoverCardStyle.value = {
-      ...hoverCardStyle.value,
-      opacity: 0,
-      transform: 'translateY(10px)'
-  };
+  // Delay hiding the card slightly to allow moving mouse onto it
+  hoverTimeoutId.value = setTimeout(() => {
+    hoveredAttack.value = null;
+    hoverCardStyle.value = {
+        ...hoverCardStyle.value,
+        opacity: 0,
+        transform: 'translateY(10px)',
+        visibility: 'hidden' // Hide it
+    };
+  }, 150); // 150ms delay
+}
+
+// Keep hover card visible if mouse enters it
+function handleCardMouseEnter() {
+  if (hoverTimeoutId.value) {
+    clearTimeout(hoverTimeoutId.value);
+    hoverTimeoutId.value = null;
+  }
+}
+
+// Hide card when mouse leaves the card itself
+function handleCardMouseLeave() {
+    handleMouseLeave(); // Use the same delayed hide logic
 }
 
 </script>
@@ -61,7 +83,10 @@ function handleMouseLeave() {
       <tbody>
         <tr v-for="(user, index) in leaderboardData" :key="user.id">
           <td>{{ index + 1 }}</td>
-          <td>{{ user.username }}</td>
+          <td>
+            {{ user.username }}
+            <span v-if="user.is_bot" class="bot-label">(BOT)</span>
+          </td>
           <td>{{ user.level }}</td>
           <td>{{ user.total_wins }}</td>
           <td class="loadout-cell">
@@ -88,6 +113,8 @@ function handleMouseLeave() {
       v-if="hoveredAttack"
       class="attack-hover-popup"
       :style="hoverCardStyle"
+      @mouseenter="handleCardMouseEnter"
+      @mouseleave="handleCardMouseLeave"
     >
       <AttackCardDisplay :attack="hoveredAttack" />
     </div>
@@ -200,6 +227,13 @@ h2 {
   display: flex; /* Ensure content inside centers if needed */
   justify-content: center;
   align-items: center;
+}
+
+.bot-label {
+  font-weight: normal;
+  font-size: 0.9em;
+  color: var(--color-text-mute);
+  margin-left: 0.3em;
 }
 
 </style> 

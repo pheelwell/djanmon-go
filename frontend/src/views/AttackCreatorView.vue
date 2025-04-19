@@ -397,13 +397,12 @@ onMounted(async () => {
 
 /* Style the AttackGrid component specifically for favorites if needed */
 .favorite-attack-selector {
-  /* Add specific styles for the favorites grid container if necessary */
-  max-height: 250px; /* Limit height and make scrollable */
-  overflow-y: auto; /* Add scrollbar if needed */
+  /* Specific styles for the AttackGrid container in this view */
+  /* REMOVED: max-height: 300px; */
+  /* REMOVED: overflow-y: auto; */
+  border: 1px solid var(--color-border-hover);
+  border-radius: 8px;
   padding: 0.5rem;
-  border: 1px solid #555;
-  border-radius: 4px;
-  background-color: rgba(0, 0, 0, 0.1); /* Slight background */
   margin-top: 0.5rem;
 }
 

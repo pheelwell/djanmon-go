@@ -189,12 +189,12 @@ function toggleSelection(attackId) {
 
 .attack-grid-layout {
   display: grid;
-  /* Responsive columns - Increase min width */
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); 
+  /* Force 3 columns */
+  grid-template-columns: repeat(3, 1fr);
   gap: 1rem;
   padding: 0.5rem; /* Padding around the grid */
-  /* NEW: Align content to the start to prevent stretching */
-  justify-content: start;
+  /* Center the grid items horizontally */
+  justify-content: center;
 }
 
 .attack-grid-item {

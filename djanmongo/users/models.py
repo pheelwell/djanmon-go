@@ -12,7 +12,6 @@ class User(AbstractUser):
     # Basic stats
     level = models.IntegerField(default=1)
     hp = models.IntegerField(default=20)
-    max_hp = models.IntegerField(default=20) # Add max_hp
     attack = models.IntegerField(default=5)
     defense = models.IntegerField(default=5)
     speed = models.IntegerField(default=5)
@@ -22,6 +21,22 @@ class User(AbstractUser):
 
     # NEW: Track user activity
     last_seen = models.DateTimeField(default=timezone.now, help_text="Last time the user made an authenticated request.")
+
+    # --- NEW: Bot Fields ---
+    is_bot = models.BooleanField(default=False, help_text="Identifies if this user is an AI-controlled bot.")
+    DIFFICULTY_CHOICES = [
+        ('easy', 'Easy'),
+        ('medium', 'Medium'),
+        ('hard', 'Hard'),
+    ]
+    difficulty = models.CharField(
+        max_length=10,
+        choices=DIFFICULTY_CHOICES,
+        blank=True, # Allow blank for regular users
+        null=True,  # Allow null for regular users
+        help_text="Difficulty level if this user is a bot."
+    )
+    # -----------------------
 
     # Relationships
     # All attacks the user has learned
@@ -107,11 +122,3 @@ class User(AbstractUser):
             }
         except User.DoesNotExist:
             return None # Should not happen if data is consistent
-
-    # Note: get_attack_usage_stats() requires more complex tracking, 
-    # potentially a new model linking battles, users, attacks used, and outcomes.
-    # We'll defer this specific feature for now.
-
-    # Add methods here if needed, e.g., for calculating max HP based on level
-    # def get_max_hp(self):
-    #    return self.hp + (self.level - 1) * 5 # Example calculation
