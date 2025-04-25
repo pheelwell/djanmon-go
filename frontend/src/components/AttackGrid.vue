@@ -45,6 +45,10 @@ const props = defineProps({
   move: {
       type: Function,
       default: null
+  },
+  disabled: { // <-- Add disabled prop
+    type: Boolean,
+    default: false
   }
 });
 
@@ -61,7 +65,8 @@ const isSelected = (attackId) => {
   return props.mode === 'select' && props.selectedIds.includes(attackId);
 };
 
-const isSelectionDisabled = (attackId) => {
+// Rename this to distinguish from the main disabled prop
+const isSelectionActionDisabled = (attackId) => {
   return props.mode === 'select' && 
          props.selectedIds.length >= props.maxSelectable && 
          !props.selectedIds.includes(attackId);
@@ -92,6 +97,15 @@ const computedDragOptions = computed(() => ({
 
 // Combined click handler
 function handleItemClick(attack) {
+  // Prevent click if the whole grid is disabled
+  if (props.disabled) {
+      return;
+  }
+  // Prevent click if selection action is disabled (only in select mode)
+  if (props.mode === 'select' && isSelectionActionDisabled(attack.id)) {
+      return;
+  }
+
   // Always emit the generic attackClick event for the parent
   emit('attackClick', attack);
 
@@ -126,7 +140,7 @@ function toggleSelection(attackId) {
 </script>
 
 <template>
-  <div class="attack-grid-component" :class="[`mode-${mode}`]">
+  <div class="attack-grid-component" :class="[`mode-${mode}`, { 'grid-disabled': disabled }]">
     <!-- Basic Grid for Display/Select/Reveal/Action -->
     <!-- Combine conditions as the structure is the same -->
     <div v-if="mode === 'display' || mode === 'select' || mode === 'reveal' || mode === 'action'" class="attack-grid-layout">
@@ -139,7 +153,8 @@ function toggleSelection(attackId) {
                 'is-revealable': mode === 'reveal',
                 'is-actionable': mode === 'action', // Add class for action mode styling
                 'selected': isSelected(attack.id),
-                'disabled': isSelectionDisabled(attack.id), // Primarily for select mode
+                // Use specific select mode disabling for styling, main disable is on container
+                'selection-disabled': isSelectionActionDisabled(attack.id),
                 'revealed': isRevealed(attack.id)
             }"
             @click="handleItemClick(attack)"  
@@ -166,6 +181,7 @@ function toggleSelection(attackId) {
       :component-data="{ name: 'fade' }" 
       v-bind="computedDragOptions"
       :move="move"
+      :disabled="disabled"
     >
         <template #header>
            <div v-if="!localDraggableModel || localDraggableModel.length === 0" class="empty-grid-message">
@@ -187,10 +203,6 @@ function toggleSelection(attackId) {
 </template>
 
 <style scoped>
-.attack-grid-component {
-  /* No specific styles needed on the component wrapper */
-}
-
 .attack-grid-layout {
   display: grid;
   /* Responsive columns with fixed pixel base for retro look */
@@ -217,32 +229,45 @@ function toggleSelection(attackId) {
 
 /* --- Interaction Styles --- */
 
-/* General hover effect for any clickable item (unless disabled) */
-.attack-grid-item:hover:not(.disabled) {
+/* Hover effect ONLY if the grid is NOT disabled */
+.attack-grid-component:not(.grid-disabled) .attack-grid-item:hover:not(.selection-disabled) {
     cursor: pointer;
     transform: scale(1.03); /* Keep slight scale effect */
 }
 
 /* Apply visual changes to the inner card on hover */
-.attack-grid-item:hover:not(.disabled) > .attack-card-content {
+.attack-grid-component:not(.grid-disabled) .attack-grid-item:hover:not(.selection-disabled) > .attack-card-content {
     border-color: var(--color-accent-secondary); /* Highlight border */
     box-shadow: 2px 2px 0px var(--color-accent-secondary); /* Highlight shadow */
 }
 
+/* Selected Style (Applies regardless of disabled state?) */
 .attack-grid-item.selected > .attack-card-content {
   /* Use primary accent for selected border */
   border-color: var(--color-accent); 
   box-shadow: 2px 2px 0px var(--color-accent); 
 }
 
-.attack-grid-item.disabled {
+/* Style for specific selection disabled (e.g., max reached in select mode) */
+.attack-grid-item.selection-disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }
-.attack-grid-item.disabled > .attack-card-content {
+.attack-grid-item.selection-disabled > .attack-card-content {
   border-color: var(--color-border);
   box-shadow: 1px 1px 0px var(--color-border); 
   transform: none;
+}
+
+/* NEW: Style for when the ENTIRE grid is disabled */
+.attack-grid-component.grid-disabled .attack-grid-item {
+    opacity: 0.5; /* Dim all items */
+    cursor: default; /* Change cursor */
+    transform: none; /* Prevent scaling */
+}
+.attack-grid-component.grid-disabled .attack-grid-item > .attack-card-content {
+    border-color: var(--color-border); /* Reset border */
+    box-shadow: 1px 1px 0px var(--color-border); /* Reset shadow */
 }
 
 /* --- Reveal Mode Styles --- */
@@ -264,14 +289,12 @@ function toggleSelection(attackId) {
   text-transform: uppercase;
 }
 
-.attack-card-face-down:hover {
+/* Don't allow hover effect on face-down card if grid is disabled */
+.attack-grid-component:not(.grid-disabled) .attack-card-face-down:hover {
   background-color: var(--color-panel-bg);
   border-color: var(--color-accent-secondary);
   color: var(--color-accent-secondary);
-}
-
-.reveal-prompt { /* Class added in template */
-    /* Specific styles for the text if needed */
+  cursor: pointer;
 }
 
 .empty-grid-message {

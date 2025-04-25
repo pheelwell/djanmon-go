@@ -104,31 +104,47 @@ const opponentCustomStatuses = computed(() => {
     return displayedBattleState.value[fieldName] || {};
 });
 
-// --- Momentum Calculation (Uses displayed state) ---
+// --- Momentum Calculation (Refactored for Active Player) ---
 const currentMomentumP1 = computed(() => displayedBattleState.value?.current_momentum_player1 ?? 0);
 const currentMomentumP2 = computed(() => displayedBattleState.value?.current_momentum_player2 ?? 0);
-const totalMomentum = computed(() => Math.max(100, currentMomentumP1.value + currentMomentumP2.value)); // Assume base total 100 if both 0?
 
-// Calculate percentage for the *user's* momentum bar
-const userMomentumPercent = computed(() => {
-  if (!userPlayerRole.value) return 0;
-  const userMomentum = userPlayerRole.value === 'player1' ? currentMomentumP1.value : currentMomentumP2.value;
-  // Calculate based on a potential max (e.g., 100 or a dynamic value if needed)
-  const maxMomentum = 100; // Or adjust as needed
-  return clamp((userMomentum / maxMomentum) * 100, 0, 100);
+// Determine whose turn it is
+const activePlayerRole = computed(() => displayedBattleState.value?.whose_turn);
+
+// Get the momentum value of the active player
+const activePlayerMomentumValue = computed(() => {
+    if (!activePlayerRole.value) return 0;
+    return activePlayerRole.value === 'player1' ? currentMomentumP1.value : currentMomentumP2.value;
 });
 
-const userMomentumStyle = computed(() => ({
-  width: `${userMomentumPercent.value}%`
+// Calculate the momentum percentage for the active player
+const activePlayerMomentumPercent = computed(() => {
+    const maxMomentum = 100; // Assuming max 100 for now
+    return clamp((activePlayerMomentumValue.value / maxMomentum) * 100, 0, 100);
+});
+
+// Style object for the momentum bar fill
+const activeMomentumBarStyle = computed(() => ({
+  width: `${activePlayerMomentumPercent.value}%`
 }));
 
-// Calculate percentage for the *opponent's* momentum bar (display purposes)
-const opponentMomentumPercent = computed(() => {
-    if (!userPlayerRole.value) return 0;
-    const opponentMomentum = userPlayerRole.value === 'player1' ? currentMomentumP2.value : currentMomentumP1.value;
-    const maxMomentum = 100; // Or adjust as needed
-    return clamp((opponentMomentum / maxMomentum) * 100, 0, 100);
+// Class object for the momentum bar fill (user vs opponent color)
+const activeMomentumBarClass = computed(() => {
+    if (!activePlayerRole.value) return 'momentum-fill'; // Default
+    const isUserTurn = activePlayerRole.value === userPlayerRole.value;
+    return [
+        'momentum-fill',
+        isUserTurn ? 'user-momentum' : 'opponent-momentum'
+    ];
 });
+
+// --- Old Momentum Computeds (Keep if needed elsewhere, otherwise remove) ---
+/*
+const totalMomentum = computed(() => Math.max(100, currentMomentumP1.value + currentMomentumP2.value)); 
+const userMomentumPercent = computed(() => { ... });
+const userMomentumStyle = computed(() => ({ ... }));
+const opponentMomentumPercent = computed(() => { ... });
+*/
 
 // Available actions now come directly from the displayed battle data
 const mySelectedAttacks = computed(() => {
@@ -308,27 +324,6 @@ watch(() => battle.value, (newBattleState) => {
 
       <!-- Main Display Area -->
       <div class="main-display">
-          <!-- Opponent Info Panel -->
-          <PlayerInfoCard
-              :player="opponentPlayer"
-              :currentHp="opponentCurrentHp"
-              :maxHp="opponentPlayer?.hp" 
-              :statStages="opponentStatStages"
-              :customStatuses="opponentCustomStatuses"
-              playerType="opponent"
-              class="player-info opponent panel"
-          />
-
-          <!-- Momentum Display Panel -->
-          <div class="momentum-display panel">
-              <div class="momentum-label">MOMENTUM</div>
-              <div class="momentum-meter">
-                 <!-- Display user's momentum fill -->
-                 <div class="momentum-fill user-momentum" :style="userMomentumStyle">
-                    <span class="momentum-value">{{ userPlayerRole === 'player1' ? currentMomentumP1 : currentMomentumP2 }}</span> 
-                 </div>
-              </div>
-          </div>
 
           <!-- User Info Panel -->
            <PlayerInfoCard
@@ -341,6 +336,29 @@ watch(() => battle.value, (newBattleState) => {
                 :isCurrentUser="true"
                 class="player-info user panel"
             />
+          <!-- Momentum Display Panel -->
+          <div class="momentum-display panel">
+              <div class="momentum-label">MOMENTUM</div>
+              <div class="momentum-meter">
+                 <div 
+                    :class="activeMomentumBarClass" 
+                    :style="activeMomentumBarStyle"
+                 >
+                    <span class="momentum-value">{{ activePlayerMomentumValue }}</span> 
+                 </div>
+              </div>
+          </div>
+
+          <!-- Opponent Info Panel -->
+          <PlayerInfoCard
+              :player="opponentPlayer"
+              :currentHp="opponentCurrentHp"
+              :maxHp="opponentPlayer?.hp" 
+              :statStages="opponentStatStages"
+              :customStatuses="opponentCustomStatuses"
+              playerType="opponent"
+              class="player-info opponent panel"
+          />
       </div>
 
       <!-- Bottom Panels Area -->
@@ -362,14 +380,15 @@ watch(() => battle.value, (newBattleState) => {
                <div class="panel-title">CHOOSE ACTION</div>
                <div v-if="displayedBattleState.status === 'active' && userPlayer">
                    <AttackGrid
-                      v-if="canAct && mySelectedAttacks.length > 0"
+                      v-if="mySelectedAttacks.length > 0"
                       :attacks="mySelectedAttacks"
                       :isSubmitting="submittingAction"
+                      :disabled="!canAct"
                       @attackClick="handleGridAttackClick"
                       class="action-grid"
                    />
-                   <div v-else-if="!canAct" class="waiting-message">WAITING...</div>
-                   <div v-else class="waiting-message">NO ATTACKS?</div>
+                   <div v-else-if="!canAct && mySelectedAttacks.length === 0" class="waiting-message">WAITING...</div>
+                   <div v-else-if="mySelectedAttacks.length === 0" class="waiting-message">NO ATTACKS?</div>
                </div>
                <div v-else class="action-placeholder">
                     <!-- Placeholder for non-active state -->
@@ -550,9 +569,14 @@ watch(() => battle.value, (newBattleState) => {
     justify-content: center; 
 }
 .momentum-fill.user-momentum {
-    background: var(--color-momentum-user); /* Solid color, remove gradient */
-    color: var(--color-bg); /* Ensure contrast */
-    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.2); /* Optional highlight */
+    background: var(--color-momentum-user); /* Solid color */
+    color: var(--color-bg); 
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.2);
+}
+.momentum-fill.opponent-momentum {
+    background: var(--color-momentum-opponent); /* Opponent color */
+    color: var(--color-bg); 
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.2);
 }
 .momentum-value {
     font-size: 0.9em;

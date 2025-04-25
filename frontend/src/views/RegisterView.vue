@@ -110,10 +110,6 @@ h2 {
     gap: 15px; /* Gap between form elements */
 }
 
-.form-group {
-    /* No extra styles needed */
-}
-
 label {
     display: block;
     margin-bottom: 5px;
@@ -123,12 +119,6 @@ label {
     text-transform: uppercase;
 }
 
-/* Assume input uses global styles */
-input[type="text"],
-input[type="email"],
-input[type="password"] {
-    /* Inherit from main.css */
-}
 
 /* Assume button uses global .btn styles */
 .btn {

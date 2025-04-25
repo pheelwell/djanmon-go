@@ -11,10 +11,10 @@ from game.models import Attack
 class User(AbstractUser):
     # Basic stats
     level = models.IntegerField(default=1)
-    hp = models.IntegerField(default=20)
-    attack = models.IntegerField(default=5)
-    defense = models.IntegerField(default=5)
-    speed = models.IntegerField(default=5)
+    hp = models.IntegerField(default=100)
+    attack = models.IntegerField(default=100)
+    defense = models.IntegerField(default=100)
+    speed = models.IntegerField(default=100)
 
     # NEW: Currency for boosters
     booster_credits = models.PositiveIntegerField(default=0, help_text="Currency earned from battles to open boosters.")

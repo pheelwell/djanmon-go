@@ -2,8 +2,14 @@ import lupa
 import math
 import random # Need for damage variance
 import logging # <-- Import logging
+from typing import TYPE_CHECKING # <-- Import TYPE_CHECKING
 from .constants import MIN_STAT_STAGE, MAX_STAT_STAGE, DAMAGE_RANDOM_FACTOR_MIN, DAMAGE_RANDOM_FACTOR_MAX
 from .calculations import get_modified_stat, clamp
+
+# --- Type Hinting --- 
+if TYPE_CHECKING:
+    from ..models import Attack # <-- Import Attack for type hinting
+# --- End Type Hinting ---
 
 # --- Setup Logger ---
 logger = logging.getLogger(__name__) # <-- Get logger instance

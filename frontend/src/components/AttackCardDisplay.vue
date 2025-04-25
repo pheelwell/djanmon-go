@@ -33,10 +33,10 @@ const displayEmoji = computed(() => props.attack.emoji || '⚔️');
 <style scoped>
 .attack-card-content {
     position: relative;
-    text-align: center;
+    /* text-align: center; */
     display: flex;
     flex-direction: column;
-    justify-content: flex-start; 
+    justify-content: flex-start;
     align-items: center; 
     width: 100%; 
     height: 100%; 
@@ -84,6 +84,7 @@ h4 {
     font-weight: normal;
     line-height: 1.2;
     text-transform: uppercase;
+    text-align: center;
 }
 
 .power {
@@ -91,15 +92,17 @@ h4 {
     color: var(--color-stat-up);
     font-weight: normal;
     margin: 0 0 4px 0;
+    text-align: center;
 }
 
 .desc {
-    font-size: 0.8em;
-    color: var(--color-text);
+    font-size: 1em;
+    color: var(--color-log-system);
     line-height: 1.3;
-    margin: 0;
+    margin: auto 0;
     max-width: 95%;
-    margin-top: auto;
     padding-bottom: 2px;
+    text-align: center;
+    font-family: 'Roboto', sans-serif;
 }
 </style> 
