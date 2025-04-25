@@ -312,28 +312,28 @@ watch(() => battle.value, (newBattleState) => {
       <header class="battle-header panel">
           <h1>BATTLE ZONE</h1>
           <div class="battle-status">STATUS: <span :class="`status-${displayedBattleState.status}`">{{ displayedBattleState.status.toUpperCase() }}</span></div>
-          <button 
+         <button 
             v-if="displayedBattleState.status === 'active'" 
             @click="handleConcede"
             :disabled="isConceding || submittingAction"
             class="btn btn-concede"
-          >
+         >
             {{ isConceding ? '...' : 'CONCEDE' }}
-          </button>
+         </button>
       </header>
 
       <!-- Main Display Area -->
       <div class="main-display">
 
           <!-- User Info Panel -->
-           <PlayerInfoCard
-                :player="userPlayer"
-                :currentHp="userCurrentHp"
+          <PlayerInfoCard
+              :player="userPlayer"
+              :currentHp="userCurrentHp"
                 :maxHp="userPlayer?.hp"
-                :statStages="userStatStages"
-                :customStatuses="userCustomStatuses"
-                playerType="user"
-                :isCurrentUser="true"
+              :statStages="userStatStages"
+              :customStatuses="userCustomStatuses"
+              playerType="user"
+              :isCurrentUser="true"
                 class="player-info user panel"
             />
           <!-- Momentum Display Panel -->
@@ -350,7 +350,7 @@ watch(() => battle.value, (newBattleState) => {
           </div>
 
           <!-- Opponent Info Panel -->
-          <PlayerInfoCard
+           <PlayerInfoCard
               :player="opponentPlayer"
               :currentHp="opponentCurrentHp"
               :maxHp="opponentPlayer?.hp" 
@@ -366,44 +366,87 @@ watch(() => battle.value, (newBattleState) => {
           <!-- Battle Log Panel -->
           <div class="battle-log panel">
               <div class="panel-title">BATTLE LOG</div>
-              <BattleLog
+            <BattleLog
                 :logEntries="displayedLogEntries"
                 :userPlayerRole="userPlayerRole"
                 :player1Name="displayedBattleState.player1.username"
                 :player2Name="displayedBattleState.player2.username"
                 :battleId="displayedBattleState.id"
-              />
-          </div>
+            />
+      </div>
 
           <!-- Action Select Panel -->
           <div class="action-select panel">
-               <div class="panel-title">CHOOSE ACTION</div>
-               <div v-if="displayedBattleState.status === 'active' && userPlayer">
-                   <AttackGrid
-                      v-if="mySelectedAttacks.length > 0"
-                      :attacks="mySelectedAttacks"
-                      :isSubmitting="submittingAction"
-                      :disabled="!canAct"
-                      @attackClick="handleGridAttackClick"
-                      class="action-grid"
-                   />
-                   <div v-else-if="!canAct && mySelectedAttacks.length === 0" class="waiting-message">WAITING...</div>
-                   <div v-else-if="mySelectedAttacks.length === 0" class="waiting-message">NO ATTACKS?</div>
+               <div class="panel-title">
+                   {{ displayedBattleState.status === 'finished' ? 'BATTLE OVER' : 'CHOOSE ACTION' }}
                </div>
-               <div v-else class="action-placeholder">
-                    <!-- Placeholder for non-active state -->
-                    <p>...</p>
-               </div>
-          </div>
-      </div>
 
-       <!-- Finished State Overlay -->
-       <div v-if="displayedBattleState.status === 'finished'" class="battle-finished-overlay">
-          <h2>Battle Over!</h2>
-          <p v-if="displayedBattleState.winner?.id === currentUser?.id" class="win-message">🎉 You won! 🎉</p>
-          <p v-else-if="displayedBattleState.winner" class="lose-message">😢 {{ displayedBattleState.winner.username }} won! 😢</p>
-          <p v-else class="draw-message">The battle ended unexpectedly.</p>
-          <router-link :to="{ name: 'home' }" class="btn return-home-button">Return Home</router-link>
+               <!-- Normal Action Area (Hidden when finished) -->
+                <div v-if="displayedBattleState.status !== 'finished'">
+                    <!-- DESKTOP: Existing Attack Grid -->
+                    <div class="action-area-desktop">
+                        <div v-if="displayedBattleState.status === 'active' && userPlayer">
+                        <AttackGrid 
+                                v-if="mySelectedAttacks.length > 0"
+                            :attacks="mySelectedAttacks" 
+                                :disabled="!canAct || submittingAction"
+                                @attackClick="handleGridAttackClick"
+                                class="action-grid"
+                            />
+                            <div v-else-if="!canAct && mySelectedAttacks.length === 0" class="waiting-message">WAITING...</div>
+                            <div v-else-if="mySelectedAttacks.length === 0" class="waiting-message">NO ATTACKS?</div>
+                    </div>
+                        <div v-else class="action-placeholder">
+                            <p>...</p>
+                        </div>
+                    </div>
+
+                    <!-- MOBILE: New Action Area -->
+                    <div class="action-area-mobile">
+                        <div v-if="displayedBattleState.status === 'active' && userPlayer && canAct">
+                            <!-- Mobile: Single Attack Preview Area -->
+                            <div class="mobile-attack-preview" :class="{ 'has-preview': selectedAttackPreview }">
+                                <AttackCardDisplay
+                                    v-if="selectedAttackPreview"
+                                    :attack="selectedAttackPreview"
+                                    @click="handlePreviewCardClick"
+                                    class="preview-card"
+                                    :class="{ 'clickable': canAct && !submittingAction }"
+                                />
+                                <div v-else class="preview-placeholder">Select an attack below</div>
+                            </div>
+
+                            <!-- Mobile: Emoji Buttons -->
+                            <div class="mobile-emoji-buttons" v-if="mySelectedAttacks.length > 0">
+                                <button
+                                    v-for="attack in mySelectedAttacks"
+                                    :key="attack.key"
+                                    @click="handleEmojiClick(attack)"
+                                    :disabled="!canAct || submittingAction"
+                                    :class="{ 'selected-preview': selectedAttackPreview?.id === attack.id }"
+                                    class="emoji-button"
+                                >
+                                    {{ attack.emoji || '⚔️' }}
+                                </button>
+                            </div>
+                            <div v-else-if="mySelectedAttacks.length === 0" class="waiting-message">NO ATTACKS?</div>
+
+                        </div>
+                        <div v-else-if="displayedBattleState.status === 'active' && !canAct" class="waiting-message">WAITING...</div>
+                        <div v-else class="action-placeholder">
+                            <p>...</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Finished State Content (Shown only when finished) -->
+                <div v-if="displayedBattleState.status === 'finished'" class="battle-finished-content">
+                    <p v-if="displayedBattleState.winner?.id === currentUser?.id" class="win-message">🎉 You won! 🎉</p>
+                    <p v-else-if="displayedBattleState.winner" class="lose-message">😢 {{ displayedBattleState.winner.username }} won! 😢</p>
+                    <p v-else class="draw-message">The battle ended unexpectedly.</p>
+                    <router-link :to="{ name: 'home' }" class="btn return-home-button">Return Home</router-link>
+                </div>
+          </div>
        </div>
 
     </div>
@@ -494,9 +537,9 @@ watch(() => battle.value, (newBattleState) => {
 
 /* --- Layout Specific --- */
 .battle-header {
-    display: flex;
+    display: flex; 
     justify-content: space-between;
-    align-items: center;
+    align-items: center; 
     padding: 5px var(--panel-padding); /* Reduced padding */
     margin-bottom: 0; /* Remove bottom margin if needed */
 }
@@ -625,38 +668,34 @@ watch(() => battle.value, (newBattleState) => {
     text-transform: uppercase;
 }
 
-/* Battle Finished Overlay */
-.battle-finished-overlay {
-  position: fixed; /* Use fixed to cover whole screen */
-  top: 0; left: 0; right: 0; bottom: 0;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  text-align: center;
-  padding: 20px;
-  background-color: rgba(var(--color-bg-rgb, 26, 26, 46), 0.9); /* Use rgba from variable if available, fallback */
-  z-index: 100; 
-  font-family: var(--font-primary);
-  color: var(--color-text);
+/* Style for the new content block inside action panel */
+.battle-finished-content {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    flex-grow: 1; /* Take space in the panel */
+    padding: 15px 10px;
+    gap: 15px;
 }
-.battle-finished-overlay h2 {
-    font-size: 2em;
-    margin-bottom: 15px;
-    color: var(--color-accent);
-    text-transform: uppercase;
-}
-.battle-finished-overlay p {
+.battle-finished-content p {
     font-size: 1.2em;
-    margin-bottom: 20px;
     line-height: 1.4;
+    margin: 0;
+    font-family: var(--font-primary);
 }
-.battle-finished-overlay .win-message { color: var(--color-hp-high); font-weight: normal; }
-.battle-finished-overlay .lose-message { color: var(--color-accent); font-weight: normal; }
-.battle-finished-overlay .draw-message { color: var(--color-log-system); }
-.return-home-button { 
+.battle-finished-content .win-message { color: var(--color-hp-high); }
+.battle-finished-content .lose-message { color: var(--color-accent); }
+.battle-finished-content .draw-message { color: var(--color-log-system); }
+.battle-finished-content .return-home-button { 
     font-size: 1.1em;
     padding: 10px 20px;
+}
+
+/* Add this OUTSIDE any media query */
+.action-area-mobile {
+    display: none;
 }
 
 /* --- Remove Old Responsive Styles --- */
@@ -665,83 +704,254 @@ watch(() => battle.value, (newBattleState) => {
 /* @media (max-width: 480px) { ... } */
 
 /* Ensure the new responsive rules are applied if needed */
-@media (max-width: 800px) { /* Adjust breakpoint as needed */
+@media (max-width: 800px) { 
+    /* --- Fullscreen Mobile Layout --- */
     .battle-screen {
-        padding: 5px; /* Reduce padding on small screens */
-        gap: 5px;
-        margin: 5px auto;
+        display: flex;
+        flex-direction: column;
+        height: 100vh; /* Full viewport height */
+        /* Consider using 100dvh for better mobile browser handling */
+        width: 100%;
+        max-width: none;
+        margin: 0;
+        padding: 0; /* Padding goes inside children now */
+        box-sizing: border-box;
+        background-color: var(--color-bg); /* Ensure bg covers screen */
+        gap: 0; /* Remove gap, manage spacing internally */
     }
 
     .battle-header {
-        flex-direction: column; /* Stack header items */
-        gap: 5px;
+        order: 0;
+        flex-shrink: 0; /* Don't shrink header */
+        padding: 5px 8px; /* Inner padding */
+        border-bottom: var(--border-width) solid var(--color-border); /* Add separator */
+        /* Reset potentially conflicting styles */
+        margin: 0;
         text-align: center;
-        padding: 8px; 
+        gap: 3px;
     }
-    .battle-header h1 {
-        font-size: 1.2em;
-    }
-    .battle-header .btn-concede {
-        font-size: 0.8em;
-        padding: 6px 10px;
-    }
+    .battle-header h1 { font-size: 1.1em; }
+    .battle-header .btn-concede { font-size: 0.8em; padding: 4px 8px; }
 
     .main-display {
+        order: 1;
+        flex-shrink: 0; /* Don't shrink player info area */
+        padding: 5px 8px; /* Horizontal padding */
+        display: flex;
         flex-direction: column;
-        align-items: stretch;
-        gap: 5px;
+        gap: 5px; /* Internal gap for player/momentum */
     }
-    
-    /* Ensure player info cards take full width when stacked */
-    .player-info {
-        flex-basis: auto; 
-        min-width: initial; /* Remove min-width */
-    }
+    /* Ensure player-info order is correct within main-display */
+    .main-display .player-info { order: initial; margin: 0; flex-basis: auto; min-width: initial; } /* Reset overrides */
+    .main-display .player-info.opponent { order: 1; }
+    .main-display .momentum-display { order: 2; padding: 5px; margin: 0; flex-basis: auto; min-width: initial; } /* Reset overrides */
+    .main-display .player-info.user { order: 3; }
 
-    .momentum-display {
-        flex-basis: auto;
-        min-width: initial;
-        order: -1; /* Move momentum display up visually */
-        padding: 10px;
-    }
 
-     .bottom-panels {
-        flex-direction: column;
-        gap: 5px;
-        min-height: initial; /* Remove fixed min-height */
-    }
-    
-    .battle-log, .action-select {
-        flex-basis: auto;
-        min-width: initial; 
-    }
+    /* No longer need specific layout rules for bottom-panels wrapper */
+    .bottom-panels { display: contents; } /* Make wrapper 'invisible' to flex layout */
 
     .battle-log {
-        /* Maybe limit height and allow scroll */
-        max-height: 300px; 
-        min-height: 150px;
-        padding: 5px;
-    }
-    .action-select {
-        min-height: 200px; /* Ensure action area has some height */
-        padding: 5px;
-    }
-
-    .action-grid {
-         grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); /* Smaller min size */
-         gap: 5px;
+        order: 2; /* After main display */
+        flex-grow: 1; /* Fill remaining space */
+        overflow-y: auto; /* Scroll log content */
+        min-height: 0; /* Important for flex-grow to work */
+        padding: 8px; /* Inner padding */
+        border-top: var(--border-width) solid var(--color-border); 
+        border-bottom: var(--border-width) solid var(--color-border); 
+        /* Reset potential conflicts */
+        flex-basis: auto;
+        margin: 0;
     }
     
-    .panel {
-        padding: 10px;
+    .action-select {
+        order: 3; /* Last visually */
+        flex-shrink: 0; /* Don't shrink action area */
+        width: 100%; 
+        padding: 8px; /* Inner padding */
+        background-color: var(--color-panel-bg); /* Needs own background */
+        box-sizing: border-box; 
+        /* Reset potential conflicts */
+        margin: 0;
+        display: flex; /* Ensure title+content stack */
+        flex-direction: column;
+        min-height: initial; /* Remove min height */
     }
 
+    /* --- Show/Hide Desktop vs Mobile Action Area --- */
+    .action-area-desktop { display: none; } 
+    .action-area-mobile {
+        display: flex; /* Overrides default 'none' */
+        flex-direction: column;
+        align-items: center;
+        gap: 8px; /* Restore slightly larger gap */
+        padding: 5px 0 0 0; /* Padding top, remove others */
+        width: 100%;
+        flex-grow: 1; 
+    }
+
+    /* --- Mobile Attack Preview Styling (Restore size slightly) --- */
+    .mobile-attack-preview {
+        width: 100%;
+        max-width: 180px; 
+        min-height: 140px; 
+        padding: 5px; 
+        margin-bottom: 5px; 
+         /* Reset border etc. */
+        border: 1px dashed var(--color-border);
+        box-sizing: border-box;
+        display: flex; 
+        justify-content: center; 
+        align-items: center; 
+    }
+    .mobile-attack-preview.has-preview { border-color: transparent; padding: 0; }
+    .mobile-attack-preview .preview-placeholder { font-size: 0.9em; }
+    .mobile-attack-preview .preview-card { min-height: 140px; cursor: default; width: 100%; height: auto;}
+    .mobile-attack-preview .preview-card.clickable { cursor: pointer; }
+    .mobile-attack-preview .preview-card.clickable:hover > .attack-card-content { 
+        /* ... hover styles ... */  
+    }
+
+    /* --- Mobile Emoji Button Styling (Restore size slightly) --- */
+    .mobile-emoji-buttons {
+        display: flex;
+        flex-wrap: wrap; 
+        justify-content: center;
+        gap: 8px; 
+        padding: 5px 0;
+        width: 100%;
+    }
+    .emoji-button {
+        font-size: 1.8em; 
+        padding: 5px;
+        min-width: 40px; 
+        min-height: 40px;
+         /* Reset other styles if needed */
+        border: 1px solid var(--color-border);
+        background-color: var(--color-panel-bg);
+        color: var(--color-text);
+        cursor: pointer;
+        display: inline-flex;
+        justify-content: center;
+        align-items: center;
+        line-height: 1;
+        box-shadow: 1px 1px 0px var(--color-border);
+        transition: transform 0.1s ease, box-shadow 0.1s ease, background-color 0.2s ease;
+        border-radius: 0; 
+    }
+    /* ... other emoji button styles ... */
+
+    .action-grid { display: none !important; }
+
+    .action-area-mobile .waiting-message {
+        padding: 15px 0; /* Restore some padding */
+        font-size: 1em;
+         /* ... other styles ... */
+        text-align: center;
+        flex-grow: 1; 
+        display: flex;
+        justify-content: center;
+        align-items: center;
+    }
+    
+    /* General panel styling */
+    .panel { 
+        padding: 8px; 
+        /* Remove margin/border settings if handled by containers now */
+        margin: 0;
+        border: none; /* Borders handled by containers */
+        box-shadow: none; /* Shadows handled by containers */
+        background-color: transparent; /* Use container bg */
+    }
+     /* Special panel styling for those needing own background/border */
+    .player-info.panel,
+    .momentum-display.panel {
+        background-color: var(--color-panel-bg);
+        border: var(--border-width) solid var(--color-border);
+        box-shadow: inset 0 0 0 2px var(--color-bg), 3px 3px 0px var(--color-border);
+        padding: 8px;
+    }
+    
     .panel-title {
+        font-size: 1em; /* Restore size */
+        margin: -8px -8px 8px -8px; /* Adjust for padding */
+        padding: 5px 10px; /* Restore padding */
+        /* Ensure title styles are suitable */
+        border-bottom: var(--border-width) solid var(--color-border);
+        text-transform: uppercase;
+        background-color: var(--color-border);
+        color: var(--color-text);
+        box-shadow: inset 0 0 0 1px var(--color-panel-bg);
+    }
+    /* Remove title from action-select if it looks odd fixed at bottom */
+    /* .action-select > .panel-title { display: none; } */
+
+    .battle-finished-content p {
         font-size: 1em;
     }
+    .battle-finished-content .return-home-button { 
+        font-size: 1em;
+        padding: 8px 15px;
+    }
 
-    .battle-finished-overlay h2 { font-size: 1.8em; }
-    .battle-finished-overlay p { font-size: 1em; }
+    /* Ensure panel overrides apply on mobile too */
+    .battle-header.panel,
+    .momentum-display.panel {
+        background-color: transparent;
+        border: none;
+        box-shadow: none;
+        padding: 5px 8px; /* Consistent padding */
+        /* Remove border-bottom added specifically for mobile header if needed */
+        border-bottom: none; 
+    }
+
+    .main-display .momentum-display {
+        /* Remove panel styles inherited from the general mobile rule */
+        background-color: transparent !important; /* Use important if needed */
+        border: none !important;
+        box-shadow: none !important;
+        padding: 5px !important; /* Keep specific padding */
+    }
+
+    /* Special panel styling for those needing own background/border */
+    /* Remove momentum display from this rule */
+    .player-info.panel
+    /* Removed: ,.momentum-display.panel */
+     {
+        background-color: var(--color-panel-bg);
+        border: var(--border-width) solid var(--color-border);
+        box-shadow: inset 0 0 0 2px var(--color-bg), 3px 3px 0px var(--color-border);
+        padding: 8px;
+    }
+}
+
+/* Remove panel styling from header and momentum display */
+.battle-header.panel,
+.momentum-display.panel {
+    background-color: transparent;
+    border: none;
+    box-shadow: none;
+    padding: 5px 8px; /* Adjust padding as needed */
+}
+
+/* Adjust title styling if it was relying on panel background */
+.battle-header .panel-title, /* Titles within these transparent panels */
+.momentum-display .panel-title {
+     /* Example: Remove title background if it looks odd */
+     /* background-color: transparent; */
+     /* border-bottom: none; */ 
+     /* Add a margin-bottom if needed */
+     /* margin-bottom: 10px; */
+     /* Keep existing title text color etc */
+}
+
+/* General panel styling for others */
+.panel {
+    background-color: var(--color-panel-bg);
+    border: var(--border-width) solid var(--color-border);
+    padding: var(--panel-padding);
+    box-shadow: inset 0 0 0 2px var(--color-bg), 3px 3px 0px var(--color-border); 
+    border-radius: 0; 
 }
 
 </style> 
