@@ -149,25 +149,15 @@ CORS_ALLOW_CREDENTIALS = True
 CSRF_TRUSTED_ORIGINS = [
     'http://localhost:5173', # Add your frontend development origin
     'http://127.0.0.1:5173',
-    'https://your-frontend-domain.com' # Placeholder - REPLACE THIS
+    'https://djanmon-go-1.onrender.com' # Placeholder - REPLACE THIS
 ]
 
 # --- Cookie Settings for Cross-Site Production ---
 # Set these based on whether DEBUG is True or False
-if not DEBUG: # Apply these settings only in production
-    SESSION_COOKIE_SECURE = True  # Must be True for SameSite=None
-    CSRF_COOKIE_SECURE = True     # Must be True for SameSite=None
-    SESSION_COOKIE_SAMESITE = 'None'
-    CSRF_COOKIE_SAMESITE = 'None'
-    # SESSION_COOKIE_HTTPONLY = True # Default, keep HttpOnly for sessionid
-    # CSRF_COOKIE_HTTPONLY = False   # Default, CSRF must be readable by JS
-else: # Explicit settings for local development (DEBUG=True)
-    # Revert to 'Lax'. Might be handled better by browser for localhost cross-port than 'None' without Secure.
-    SESSION_COOKIE_SAMESITE = 'Lax' 
-    CSRF_COOKIE_SAMESITE = 'Lax' 
-    # Still keep Secure=False for HTTP localhost development
-    SESSION_COOKIE_SECURE = False 
-    CSRF_COOKIE_SECURE = False
+SESSION_COOKIE_SECURE = True  # Must be True for SameSite=None
+CSRF_COOKIE_SECURE = True     # Must be True for SameSite=None
+SESSION_COOKIE_SAMESITE = 'None'
+CSRF_COOKIE_SAMESITE = 'None'
 
 # Optional: Cookie Domain (only if FE/BE are subdomains of the same parent domain)
 # If your FE is app.example.com and BE is api.example.com, you might use:
