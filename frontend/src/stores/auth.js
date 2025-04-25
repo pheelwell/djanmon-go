@@ -199,6 +199,49 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  async function deleteAttack(attackId) {
+      console.log('Attempting to delete attack with ID:', attackId); // Add log
+      if (!attackId) {
+          throw new Error("Attack ID is required for deletion.");
+      }
+      // Use state refs directly if needed, e.g., actionError.value = null;
+      // Or ensure actionError/actionSuccessMessage are defined in the setup function
+      // if they are not already.
+      // actionError.value = null; 
+      // actionSuccessMessage.value = null;
+      try {
+          // Ensure the API path matches your Django urls.py
+          const response = await apiClient.delete(`/game/attacks/${attackId}/delete/`);
+          console.log('API delete response:', response); // Log response
+
+          // Update local state
+          if (user.value && user.value.attacks) {
+              const attackIndex = user.value.attacks.findIndex(a => a && a.id === attackId);
+              if (attackIndex > -1) {
+                  user.value.attacks.splice(attackIndex, 1);
+                  console.log(`Attack ${attackId} removed from local user.attacks.`);
+              }
+          }
+          if (user.value && user.value.selected_attacks) {
+               const selectedIndex = user.value.selected_attacks.findIndex(a => a && a.id === attackId);
+              if (selectedIndex > -1) {
+                  user.value.selected_attacks.splice(selectedIndex, 1);
+                   console.log(`Attack ${attackId} removed from local user.selected_attacks.`);
+              }
+          }
+          localStorage.setItem('user', JSON.stringify(user.value)); // Re-save user state
+
+          // actionSuccessMessage.value = 'Attack deleted successfully!'; // Set success message if defined
+          return { success: true };
+
+      } catch (error) {
+           console.error("Error deleting attack in store action:", error);
+           const errorMsg = error.response?.data?.error || error.message || 'Failed to delete attack.';
+           // actionError.value = errorMsg; // Set error message if defined
+           throw new Error(errorMsg);
+      }
+  }
+
   return {
     // State refs (Tokens removed)
     user,
@@ -220,6 +263,7 @@ export const useAuthStore = defineStore('auth', () => {
     fetchUserProfile,
     updateSelectedAttacks,
     updateUserStats,
-    updateUserProfile
+    updateUserProfile,
+    deleteAttack
   };
 }); 

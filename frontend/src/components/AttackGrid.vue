@@ -49,6 +49,10 @@ const props = defineProps({
   disabled: { // <-- Add disabled prop
     type: Boolean,
     default: false
+  },
+  allowDeletion: { // <-- Add prop
+    type: Boolean,
+    default: false
   }
 });
 
@@ -56,7 +60,8 @@ const emit = defineEmits([
   'update:selectedIds', // For v-model support
   'reveal',
   'update:draggableModel', // For v-model support with drag
-  'attackClick' // <-- Add attackClick here
+  'attackClick', // <-- Add attackClick here
+  'deleteAttack' // <-- Add emit
 ]);
 
 // --- Computed properties for styling/disabling --- 
@@ -167,6 +172,8 @@ function toggleSelection(attackId) {
             <AttackCardDisplay
                 v-else
                 :attack="attack"
+                :showDeleteButton="allowDeletion && mode !== 'select' && mode !== 'reveal'" 
+                @delete-clicked="$emit('deleteAttack', attack)"
             ></AttackCardDisplay>
         </div>
     </div>
@@ -190,7 +197,11 @@ function toggleSelection(attackId) {
         </template>
         <template #item="{element}">
              <div class="attack-grid-item is-draggable">
-                <AttackCardDisplay :attack="element"></AttackCardDisplay>
+                <AttackCardDisplay 
+                  :attack="element" 
+                  :showDeleteButton="allowDeletion"
+                  @delete-clicked="$emit('deleteAttack', element)"
+                ></AttackCardDisplay>
             </div>
         </template>
     </draggable>

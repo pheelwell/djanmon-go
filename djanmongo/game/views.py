@@ -543,3 +543,34 @@ class AttackLeaderboardView(generics.ListAPIView):
         limit = int(self.request.query_params.get('limit', 50))
         return queryset[:limit]
 # --- END Attack Leaderboard View ---
+
+# --- NEW: Attack Delete View ---
+class AttackDeleteView(views.APIView):
+    """
+    Allows the creator of an attack to delete it.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def delete(self, request, pk, *args, **kwargs):
+        try:
+            attack = Attack.objects.get(pk=pk)
+        except Attack.DoesNotExist:
+            return Response({"error": "Attack not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        # --- Verify Ownership ---
+        if attack.creator != request.user:
+            return Response({"error": "You do not have permission to modify this attack."}, status=status.HTTP_403_FORBIDDEN)
+
+        # Optional checks for active battle/selection can be added here
+
+        attack_name = attack.name # Get name for logging before removing
+        
+        # --- Remove Attack from User's Collections, DO NOT DELETE --- 
+        request.user.attacks.remove(attack)
+        request.user.selected_attacks.remove(attack) # Also remove if selected
+        # attack.delete() # <-- REMOVED THIS LINE
+
+        print(f"[User: {request.user.username}] Removed attack '{attack_name}' (ID: {pk}) from their collection.")
+
+        return Response(status=status.HTTP_204_NO_CONTENT)
+# --- End AttackDeleteView ---

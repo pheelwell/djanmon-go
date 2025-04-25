@@ -14,10 +14,14 @@ const props = defineProps({
   disabledIds: {
     type: Set,
     default: () => new Set()
+  },
+  allowDeletion: {
+    type: Boolean,
+    default: false
   }
 });
 
-const emit = defineEmits(['attackClick']); 
+const emit = defineEmits(['attackClick', 'deleteAttack']); 
 
 function handleClick(attack) {
   if (props.mode !== 'action' || props.disabledIds.has(attack.id)) {
@@ -46,7 +50,11 @@ function handleClick(attack) {
         }"
         @click="handleClick(attack)"
       >
-        <AttackCardDisplay :attack="attack" />
+        <AttackCardDisplay 
+          :attack="attack" 
+          :showDeleteButton="allowDeletion"
+          @delete-clicked="$emit('deleteAttack', attack)"
+        />
       </li>
     </ul>
   </div>

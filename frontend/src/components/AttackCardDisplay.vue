@@ -5,8 +5,13 @@ const props = defineProps({
   attack: {
     type: Object,
     required: true
+  },
+  showDeleteButton: {
+    type: Boolean,
+    default: false
   }
 });
+const emit = defineEmits(['delete-clicked']);
 
 // You could add computed properties here if needed for display logic,
 // e.g., formatting descriptions or determining icons.
@@ -16,6 +21,16 @@ const displayEmoji = computed(() => props.attack.emoji || '⚔️');
 
 <template>
   <div class="attack-card-content">
+    <!-- Delete Button (Top Left) -->
+    <button
+      v-if="showDeleteButton"
+      @click.stop="$emit('delete-clicked')"
+      class="delete-button"
+      title="Delete Attack"
+    >
+      &times;
+    </button>
+
     <!-- Top Right Cost Display -->
     <div v-if="attack.momentum_cost > 0" class="cost-display">
         <span class="energy-symbol">⚡️</span>
@@ -104,5 +119,33 @@ h4 {
     padding-bottom: 2px;
     text-align: center;
     font-family: 'Roboto', sans-serif;
+}
+
+.delete-button {
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  background-color: var(--color-accent);
+  color: var(--color-panel-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 0;
+  width: 18px;
+  height: 18px;
+  font-size: 14px;
+  line-height: 16px;
+  text-align: center;
+  padding: 0;
+  cursor: pointer;
+  z-index: 2;
+  box-shadow: 1px 1px 0px var(--color-border);
+  transition: background-color 0.2s ease, transform 0.1s ease;
+}
+
+.delete-button:hover {
+  background-color: #c0392b;
+}
+.delete-button:active {
+   transform: translate(1px, 1px);
+   box-shadow: none;
 }
 </style> 

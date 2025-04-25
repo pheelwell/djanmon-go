@@ -9,6 +9,7 @@ import AttackCardDisplay from './AttackCardDisplay.vue';
 import AttackGrid from './AttackGrid.vue';
 import AttackListMobile from './AttackListMobile.vue'; // <-- Import Mobile List
 import { debounce } from 'lodash-es'; // <-- Import debounce
+import ConfirmDeleteModal from './ConfirmDeleteModal.vue'; // <-- Import modal
 
 const authStore = useAuthStore();
 
@@ -23,6 +24,9 @@ const searchQuery = ref('');
 const isSaving = ref(false);
 const error = ref(null);
 const successMessage = ref(null);
+const deletingAttackId = ref(null); // <-- Add state for delete loading
+const isDeleteModalOpen = ref(false); // <-- State for modal visibility
+const attackToDelete = ref(null);     // <-- State for attack being deleted
 
 const MAX_SELECTED = 6;
 
@@ -145,6 +149,44 @@ const debouncedSaveSelection = debounce(async () => {
     }
 }, 1000); // Debounce for 1 second (adjust as needed)
 
+// --- MODIFIED: Delete Handler (Opens Modal) ---
+function handleDeleteAttack(attackToConfirm) {
+   if (!attackToConfirm || !attackToConfirm.id || deletingAttackId.value) return;
+   attackToDelete.value = attackToConfirm; // Set the attack for the modal
+   isDeleteModalOpen.value = true;         // Open the modal
+}
+
+// --- NEW: Execute Actual Delete After Confirmation ---
+async function executeDelete() {
+    if (!attackToDelete.value || !attackToDelete.value.id) return;
+    if (deletingAttackId.value) return; // Prevent double clicks
+
+    deletingAttackId.value = attackToDelete.value.id;
+    error.value = null; 
+    authStore.actionError = null; 
+    authStore.actionSuccessMessage = null;
+    isDeleteModalOpen.value = false; // Close modal immediately
+
+    try {
+        await authStore.deleteAttack(attackToDelete.value.id);
+        successMessage.value = `Attack "${attackToDelete.value.name}" deleted.`;
+        setTimeout(() => successMessage.value = null, 3000);
+        initializeEditorLists(); // Refresh lists
+    } catch (err) {
+        console.error("Deletion failed:", err);
+        // Error message should be set in authStore.actionError
+    } finally {
+        deletingAttackId.value = null;
+        attackToDelete.value = null; // Clear the attack being deleted
+    }
+}
+
+// --- NEW: Close Modal Handler ---
+function closeDeleteModal() {
+    isDeleteModalOpen.value = false;
+    attackToDelete.value = null;
+}
+
 // --- Lifecycle --- 
 onMounted(() => {
     initializeEditorLists();
@@ -232,9 +274,15 @@ function handleMobileDeselect(attack) {
   <div class="moveset-manager">
 
     <!-- Error/Success Messages -->
-    <div v-if="error" class="error-message">
-        {{ error }}
+    <div v-if="error || authStore.actionError" class="error-message">
+        {{ error || authStore.actionError }}
     </div>
+     <div v-if="successMessage || authStore.actionSuccessMessage" class="success-message">
+        {{ successMessage || authStore.actionSuccessMessage }}
+    </div>
+     <div v-if="deletingAttackId" class="loading-placeholder">
+          Deleting attack...
+     </div>
 
     <div class="manager-layout">
         <!-- Selected Attacks Column -->
@@ -249,6 +297,7 @@ function handleMobileDeselect(attack) {
                 class="selected-attack-grid selected-attacks-fixed-3"
                 :dragOptions="{ ghostClass: 'ghost' }" 
                 :move="checkMove"
+                :allowDeletion="false" 
             >
                 <template #empty>
                     <div class="empty-list-message">Drag attacks here to select (Max {{ MAX_SELECTED }}).</div>
@@ -261,6 +310,7 @@ function handleMobileDeselect(attack) {
                      :attacks="selectedInEditor"
                      mode="action" 
                      @attackClick="handleMobileDeselect"
+                     :allowDeletion="false" 
                  >
                      <template #empty>
                         <div class="empty-list-message">No attacks selected.</div>
@@ -292,8 +342,10 @@ function handleMobileDeselect(attack) {
                  groupName="attacks"
                  class="available-attack-grid"
                  :dragOptions="{ ghostClass: 'ghost', filter: '.filtered-out' }"
-                :move="checkMove" 
-            >
+                 :move="checkMove" 
+                 :allowDeletion="true" 
+                 @deleteAttack="handleDeleteAttack" 
+             >
                  <template #empty>
                      <div class="empty-list-message">
                        {{ searchQuery ? 'No attacks match your search.' : 'No more attacks available.' }}
@@ -308,6 +360,8 @@ function handleMobileDeselect(attack) {
                      mode="action"
                      @attackClick="handleMobileSelect"
                      :disabledIds="selectedAttackIdsSet"
+                     :allowDeletion="true" 
+                     @deleteAttack="handleDeleteAttack" 
                  >
                      <template #empty>
                          <div class="empty-list-message">
@@ -319,6 +373,14 @@ function handleMobileDeselect(attack) {
         </div>
 
     </div>
+
+    <!-- Confirmation Modal -->
+    <ConfirmDeleteModal 
+        :isOpen="isDeleteModalOpen" 
+        :attack="attackToDelete" 
+        @update:isOpen="isDeleteModalOpen = $event" 
+        @confirm="executeDelete"
+    />
 
   </div>
 </template>
@@ -560,6 +622,16 @@ function handleMobileDeselect(attack) {
     .manager-layout {
         flex-direction: column;
     }
+}
+
+.loading-placeholder { /* Basic loading style */
+   padding: 10px;
+   text-align: center;
+   font-style: italic;
+   color: var(--color-log-system);
+   background-color: var(--color-bg);
+   border: 1px dashed var(--color-border);
+   margin-bottom: 1rem;
 }
 
 </style> 

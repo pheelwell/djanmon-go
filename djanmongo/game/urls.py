@@ -17,4 +17,6 @@ urlpatterns = [
     # NEW: Attack Generation Endpoint
     path('attacks/generate/', views.GenerateAttacksView.as_view(), name='attack_generate'),
     path('attacks/my-attacks/', views.MyAttacksListView.as_view(), name='my_attacks_list'),
+    # NEW: Attack Delete Endpoint
+    path('attacks/<int:pk>/delete/', views.AttackDeleteView.as_view(), name='attack-delete'),
 ]
