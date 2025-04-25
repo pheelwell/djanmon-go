@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import apiClient from '@/services/api'; // Adjust path if needed
-import { logoutUser as apiLogoutUser } from '@/services/api'; // Import specific API function
+import { logoutUser as apiLogoutUser, fetchCsrfToken } from '@/services/api'; // Import specific API function and fetchCsrfToken
 import router from '@/router';
 
 export const useAuthStore = defineStore('auth', () => {
@@ -40,8 +40,10 @@ export const useAuthStore = defineStore('auth', () => {
       // Backend now returns user data on successful login
       user.value = response.data;
       localStorage.setItem('user', JSON.stringify(user.value)); 
-      // No need to explicitly call fetchUserProfile here anymore
-      // await fetchUserProfile(); 
+      
+      // *** FETCH CSRF TOKEN AFTER LOGIN ***
+      await fetchCsrfToken(); 
+      
       return true;
     } catch (error) {
       console.error('Login failed:', error.response?.data || error.message);
@@ -80,6 +82,10 @@ export const useAuthStore = defineStore('auth', () => {
       const response = await apiClient.get('/users/me/');
       user.value = response.data;
       localStorage.setItem('user', JSON.stringify(user.value));
+      
+      // *** FETCH CSRF TOKEN AFTER PROFILE FETCH ***
+      await fetchCsrfToken(); 
+      
     } catch (error) {
       console.error('Failed to fetch user profile:', error.response?.data || error.message);
       // If fetching profile fails (e.g., 401/403), it implies no valid session.
@@ -105,7 +111,11 @@ export const useAuthStore = defineStore('auth', () => {
         // localStorage.removeItem('refreshToken');
         localStorage.removeItem('user');
         
-        // Redirect to login page
+        // TODO: Ideally, clear the stored csrfToken in api.js as well.
+        // This requires either exporting a setter/clearer function from api.js
+        // or managing the token within this store (more complex).
+        // For now, the token will remain until the next fetch/page load.
+
         router.push({ name: 'login' }); 
     }
   }
