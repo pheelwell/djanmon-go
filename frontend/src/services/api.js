@@ -1,22 +1,25 @@
 import axios from 'axios';
 
 // Determine the base URL based on the environment
-// Use VITE_API_BASE_URL from .env file during development (npm run dev)
-// Use the current window origin for production builds (assuming frontend and backend are served from the same domain or handled by a proxy)
-// const baseURL = import.meta.env.VITE_API_BASE_URL || window.location.origin + '/api';
+let baseURL;
 
-// --- MODIFIED for SameSite Development ---
-// Explicitly target localhost:8000 to match the likely browser access point
-// Ensures browser treats requests as same-site if frontend is on localhost:5173
-const useDevServer = import.meta.env.DEV; // Check if in development mode (Vite default)
-const baseURL = useDevServer 
-    ? 'http://localhost:8000/api' 
-    : (window.location.origin + '/api'); // Production remains same-origin
-// --- END MODIFICATION ---
+if (import.meta.env.VITE_API_BASE_URL) {
+    // 1. Use environment variable if provided (Primary for production)
+    baseURL = import.meta.env.VITE_API_BASE_URL;
+    console.log(`Using VITE_API_BASE_URL: ${baseURL}`);
+} else if (import.meta.env.DEV) {
+    // 2. Fallback for local development (if no env var set)
+    baseURL = 'http://localhost:8000/api'; 
+    console.log(`Using development fallback baseURL: ${baseURL}`);
+} else {
+    // 3. Fallback for production if no env var set (assuming relative path)
+    baseURL = window.location.origin + '/api'; 
+    console.log(`Using production relative path fallback baseURL: ${baseURL}`);
+}
 
 const apiClient = axios.create({
   baseURL: baseURL,
-  withCredentials: true, // <-- ADDED: Send cookies with requests
+  withCredentials: true, // Keep this for session cookies
   // headers: { // You might set common headers here if needed
   //   'Content-Type': 'application/json',
   // }
