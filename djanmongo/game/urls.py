@@ -9,6 +9,7 @@ urlpatterns = [
     path('battles/initiate/', views.InitiateBattleView.as_view(), name='battle_initiate'),
     path('battles/requests/', views.PendingBattlesView.as_view(), name='battle_requests'),
     path('battles/<int:pk>/respond/', views.RespondBattleView.as_view(), name='battle_respond'),
+    path('battles/<int:pk>/cancel/', views.CancelBattleView.as_view(), name='battle_cancel'),
     path('battles/<int:pk>/', views.BattleDetailView.as_view(), name='battle_detail'),
     path('battles/<int:pk>/action/', views.BattleActionView.as_view(), name='battle_action'),
     path('battles/<int:pk>/concede/', views.ConcedeBattleView.as_view(), name='battle_concede'),

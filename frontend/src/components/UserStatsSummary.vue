@@ -27,17 +27,17 @@ const nemesisDisplay = computed(() => {
 </script>
 
 <template>
-  <section class="my-stats">
-    <h2>My Stats</h2>
-    <div v-if="isLoading" class="loading">Loading your stats...</div>
-    <div v-else-if="stats" class="my-stats-grid">
-        <p><strong>Wins:</strong> {{ stats.total_wins ?? 'N/A' }}</p>
-        <p><strong>Losses:</strong> {{ stats.total_losses ?? 'N/A' }}</p>
-        <p><strong>Rounds Played:</strong> {{ stats.total_rounds_played ?? 'N/A' }}</p>
-        <p><strong>Nemesis:</strong> {{ nemesisDisplay }}</p>
-    </div>
-     <div v-else class="no-stats-message">Could not load your stats.</div>
-  </section>
+  <div v-if="isLoading" class="loading">Loading stats...</div>
+  <div v-else-if="stats" class="my-stats-grid"> 
+      <p>Wins: {{ stats.total_wins ?? 'N/A' }}</p>
+      <p>Losses: {{ stats.total_losses ?? 'N/A' }}</p>
+      <p>Rounds Played: {{ stats.total_rounds_played ?? 'N/A' }}</p>
+      <p>Nemesis: {{ nemesisDisplay }}</p>
+      <!-- Add other stats here as needed -->
+  </div>
+  <div v-else class="no-stats-message">
+    No stats available.
+  </div>
 </template>
 
 <style scoped>

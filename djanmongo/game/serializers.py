@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Attack, Battle
+from .models import Attack, Battle, AttackUsageStats
 from users.serializers import UserSerializer, BasicUserSerializer
 from .logic import calculate_momentum_cost_range
 
@@ -14,6 +14,7 @@ class AttackSerializer(serializers.ModelSerializer):
 
 class BattleInitiateSerializer(serializers.Serializer):
     opponent_id = serializers.IntegerField(required=True)
+    fight_as_bot = serializers.BooleanField(required=False, default=False, help_text="Set to true to fight the opponent as AI (if they allow it). Otherwise, sends a normal challenge.")
 
 class BattleRespondSerializer(serializers.Serializer):
     action = serializers.ChoiceField(choices=['accept', 'decline'], required=True)
@@ -38,6 +39,7 @@ class BattleSerializer(serializers.ModelSerializer):
             'last_turn_summary',
             'current_momentum_player1', 'current_momentum_player2', 'whose_turn',
             'my_selected_attacks',
+            'player2_is_ai_controlled',
             'updated_at'
         )
         read_only_fields = fields
@@ -115,3 +117,23 @@ class GenerateAttackRequestSerializer(serializers.Serializer):
         max_length=6,
         help_text="Optional list of up to 6 favorite attack IDs to influence generation."
     )
+
+# --- NEW: Attack Leaderboard Serializer ---
+class AttackLeaderboardSerializer(serializers.ModelSerializer):
+    # Nest the basic attack details
+    attack_details = AttackSerializer(source='attack', read_only=True)
+    # Get the owner's username from the related Attack's creator field
+    owner_username = serializers.CharField(source='attack.creator.username', read_only=True, allow_null=True)
+    # Rename wins_contributed for clarity in API response
+    total_wins = serializers.IntegerField(source='wins_contributed', read_only=True)
+
+    class Meta:
+        model = AttackUsageStats
+        fields = (
+            # 'attack', # Don't need the raw ID probably
+            'attack_details',
+            'owner_username',
+            'times_used',
+            'total_wins' 
+        )
+# --- END Attack Leaderboard Serializer ---

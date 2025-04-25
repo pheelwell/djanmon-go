@@ -20,7 +20,7 @@ SECRET_KEY = os.environ.get('SECRET_KEY', 'your-development-secret-key') # ADD t
 DEBUG = os.environ.get('DEBUG', 'True') == 'True' # MODIFY this line (or add if missing)
 
 # Get allowed hosts from env var, fallback for local dev
-ALLOWED_HOSTS_STRING = os.environ.get('DJANGO_ALLOWED_HOSTS', '127.0.0.1,localhost,palmer-kentucky-geological-dc.trycloudflare.com, lexmark-specialists-leone-legislation.trycloudflare.com') # ADD or MODIFY this
+ALLOWED_HOSTS_STRING = os.environ.get('DJANGO_ALLOWED_HOSTS', '127.0.0.1,localhost') # ADD or MODIFY this
 ALLOWED_HOSTS = ALLOWED_HOSTS_STRING.split(',') if ALLOWED_HOSTS_STRING else [] # MODIFY this line
 
 # Application definition
@@ -29,9 +29,6 @@ INSTALLED_APPS = [
     'unfold',  # Required
     'unfold.contrib.filters',  # Optional - Better filters
     'unfold.contrib.forms',  # Optional - Consistent forms
-    # 'unfold.contrib.import_export',  # Optional - Requires django-import-export
-    # 'unfold.contrib.guardian',  # Optional - Requires django-guardian
-    # 'unfold.contrib.simple_history', # Optional - Requires django-simple-history
 
     # Default Django apps
     'django.contrib.admin',
@@ -43,7 +40,6 @@ INSTALLED_APPS = [
 
     # Third-party apps
     'rest_framework',
-    'rest_framework_simplejwt',
     'corsheaders',
     'djangoeditorwidgets', # <-- Add this
 
@@ -126,45 +122,14 @@ AUTH_PASSWORD_VALIDATORS = [
 
 # --- Django REST Framework Settings ---
 REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES': (
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
-    ),
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework.authentication.SessionAuthentication',
+        # Optionally keep BasicAuthentication for browsable API:
+        # 'rest_framework.authentication.BasicAuthentication',
+    ],
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticatedOrReadOnly', # Adjust as needed
     )
-}
-
-# --- Simple JWT Settings ---
-SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
-    'ROTATE_REFRESH_TOKENS': False,
-    'BLACKLIST_AFTER_ROTATION': False,
-    'UPDATE_LAST_LOGIN': True,
-
-    'ALGORITHM': 'HS256',
-    'SIGNING_KEY': SECRET_KEY, # Uses Django's SECRET_KEY by default
-    'VERIFYING_KEY': None,
-    'AUDIENCE': None,
-    'ISSUER': None,
-    'JWK_URL': None,
-    'LEEWAY': 0,
-
-    'AUTH_HEADER_TYPES': ('Bearer',),
-    'AUTH_HEADER_NAME': 'HTTP_AUTHORIZATION',
-    'USER_ID_FIELD': 'id',
-    'USER_ID_CLAIM': 'user_id',
-    'USER_AUTHENTICATION_RULE': 'rest_framework_simplejwt.authentication.default_user_authentication_rule',
-
-    'AUTH_TOKEN_CLASSES': ('rest_framework_simplejwt.tokens.AccessToken',),
-    'TOKEN_TYPE_CLAIM': 'token_type',
-    'TOKEN_USER_CLASS': 'rest_framework_simplejwt.models.TokenUser',
-
-    'JTI_CLAIM': 'jti',
-
-    'SLIDING_TOKEN_REFRESH_EXP_CLAIM': 'refresh_exp',
-    'SLIDING_TOKEN_LIFETIME': timedelta(minutes=5),
-    'SLIDING_TOKEN_REFRESH_LIFETIME': timedelta(days=1),
 }
 
 # Use environment variable for Gemini API Key, default to None if not set
@@ -177,6 +142,38 @@ CORS_ALLOWED_ORIGINS = [
     'https://djanmon-go-1.onrender.com'
 ]
 
+# Allow cookies to be sent with cross-origin requests
+CORS_ALLOW_CREDENTIALS = True
+
+# --- NEW: CSRF Trusted Origins ---
+CSRF_TRUSTED_ORIGINS = [
+    'http://localhost:5173', # Add your frontend development origin
+    'http://127.0.0.1:5173',
+    'https://your-frontend-domain.com' # Placeholder - REPLACE THIS
+]
+
+# --- Cookie Settings for Cross-Site Production ---
+# Set these based on whether DEBUG is True or False
+if not DEBUG: # Apply these settings only in production
+    SESSION_COOKIE_SECURE = True  # Must be True for SameSite=None
+    CSRF_COOKIE_SECURE = True     # Must be True for SameSite=None
+    SESSION_COOKIE_SAMESITE = 'None'
+    CSRF_COOKIE_SAMESITE = 'None'
+    # SESSION_COOKIE_HTTPONLY = True # Default, keep HttpOnly for sessionid
+    # CSRF_COOKIE_HTTPONLY = False   # Default, CSRF must be readable by JS
+else: # Explicit settings for local development (DEBUG=True)
+    # Revert to 'Lax'. Might be handled better by browser for localhost cross-port than 'None' without Secure.
+    SESSION_COOKIE_SAMESITE = 'Lax' 
+    CSRF_COOKIE_SAMESITE = 'Lax' 
+    # Still keep Secure=False for HTTP localhost development
+    SESSION_COOKIE_SECURE = False 
+    CSRF_COOKIE_SECURE = False
+
+# Optional: Cookie Domain (only if FE/BE are subdomains of the same parent domain)
+# If your FE is app.example.com and BE is api.example.com, you might use:
+# SESSION_COOKIE_DOMAIN = ".example.com"
+# CSRF_COOKIE_DOMAIN = ".example.com"
+# Leave unset if they are completely different domains.
 
 STATIC_URL = 'static/'
 # Add this for WhiteNoise if serving static files from Django/Gunicorn

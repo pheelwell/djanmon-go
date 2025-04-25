@@ -74,19 +74,19 @@ Feel free to reuse or build upon concepts or custom statuses from these attacks 
         - `'debug'`: **Use for detailed step-by-step logic explanation for developers.** Shows calculation inputs/outputs, condition checks, etc. Displayed faintly.
     - `source` (string, optional, default='script'): Who generated the log.
         - `'player1'`, `'player2'`: Message relates to player's direct action/intent (e.g., the initial `action` log).
-        - `'script'`: **Default & MOST COMMON for Lua.** Message is a result of script logic (damage, healing, status effects).
+        - `'script'`: Message is a result of script logic (damage, healing, status effects).
         - `'system'`: Core game engine message (rarely used by Lua).
         - `'debug'`: **Use for debug messages originating from script logic.**
     - `details` (Lua table, optional): Extra data for frontend display based on `effect_type`. For `action`, provide `attack_name` and `emoji`.
     - **Purpose:** Provide clear feedback to players about what happened. Debug logs help developers trace script execution.
     - **Standard Phrasing:** Use consistent phrasing for common events:
-        - Damage: `[Target Name] took X damage.`
-        - Heal: `[Target Name] recovered Y HP.`
-        - Stat Raised: `[Target Name]'s [Stat] was raised!` or `[Target Name]'s [Stat] rose to +Z!`
-        - Stat Lowered: `[Target Name]'s [Stat] was lowered!` or `[Target Name]'s [Stat] fell to -Z!`
-        - Status Applied: `[Target Name] is now [Status Name]!` (maybe add duration/stacks)
-        - Status Removed: `[Target Name] is no longer [Status Name].`
-        - Status Effect Trigger: `[Target Name] took X damage from [Status Name].`
+        - Damage: `[Target Name] took X damage.` effect_type = 'damage'
+        - Heal: `[Target Name] recovered Y HP.` effect_type = 'heal'
+        - Stat Raised: `[Target Name]'s [Stat] was raised!` or `[Target Name]'s [Stat] rose to +Z!` effect_type = 'stat_change'
+        - Stat Lowered: `[Target Name]'s [Stat] was lowered!` or `[Target Name]'s [Stat] fell to -Z!` effect_type = 'stat_change'
+        - Status Applied: `[Target Name] is now [Status Name]!` (maybe add duration/stacks) effect_type = 'status_apply'
+        - Status Removed: `[Target Name] is no longer [Status Name].` effect_type = 'status_remove'
+        - Status Effect Trigger: `[Target Name] took X damage from [Status Name].` effect_type = 'status_effect'
 
 ### Effect Functions:
 - `apply_std_damage(base_power, target_role)`: Applies standard damage calculation (uses stats, stages, variance). Returns damage dealt.
@@ -564,7 +564,8 @@ def process_and_save_generated_attacks(generated_data: list, user: User) -> list
                 name=unique_attack_name,
                 description=s_description,
                 emoji=s_emoji,
-                momentum_cost=momentum_cost
+                momentum_cost=momentum_cost,
+                creator=user
             )
 
             # Create Script objects from validated list

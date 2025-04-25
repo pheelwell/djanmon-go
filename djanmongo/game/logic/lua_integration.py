@@ -26,15 +26,19 @@ def register_lua_api_func(func):
         LUA_API[func.__name__] = func
     return func
 
+# --- Utility Functions (Used internally by API funcs) ---
 @register_lua_api_func
 def log(context, text, effect_type="info", source="script", details=None):
     """Helper to add entries to the script's log within the context."""
     log_entry = {"source": source, "text": text, "effect_type": effect_type}
     if details:
-        # Ensure details is converted from Lua table if necessary (should happen automatically via Lupa?)
-        log_entry["effect_details"] = dict(details) if details else {}
+        # Convert Lua table details to Python dict if necessary!
+        if lupa.lua_type(details) == 'table':
+            log_entry["effect_details"] = dict(details)
+        else:
+            log_entry["effect_details"] = details # Assume primitive if not table
     context['log_entries'].append(log_entry)
-    # print(f"    [Lua Log - {effect_type} ({source})] {text}") # Optional console log
+    # print(f"    [Lua Log - {effect_type}] {text}") # Optional console log
 
 # --- NEW API Function for Unregistering ---
 @register_lua_api_func
@@ -144,6 +148,7 @@ def apply_std_hp_change(context, hp_change, target_role=None):
         context['state_changed'] = True
         target_name = get_player_name(context, target) or target
         effect = "heal" if actual_change > 0 else "damage" # Treat HP cost as damage type
+        #log(context, f"{target_name} took {actual_change} {effect}.", effect, target_role)
         return actual_change # Return the actual change
     else:
         return 0 # Return 0 if no change
@@ -186,9 +191,11 @@ def apply_std_stat_change(context, stat, mod, target_role=None):
         context['state_changed'] = True
         target_name = get_player_name(context, target) or target
         change_dir = "raised" if mod > 0 else "lowered"
+        log(context, f"{target_name}'s {stat.upper()} was {change_dir} to {new_stage}.", "stat_change", target_role)
     else:
         limit_dir = "highest" if mod > 0 else "lowest"
         target_name = get_player_name(context, target) or target
+        log(context, f"{target_name}'s {stat.upper()} is already at the {limit_dir} limit.", "info", target_role)
 
 # --- NEW: Add function to get current stage --- 
 @register_lua_api_func
@@ -363,6 +370,7 @@ def remove_custom_status(context, role, status_name):
     if role not in context.get('custom_statuses', {}):
         # Use logger for internal error
         logger.warning(f"Lua API Error: Invalid role '{role}' used in remove_custom_status.")
+        # log(context, f"Invalid role '{role}' used in remove_custom_status", "error") # REMOVED
         return
         
     player_statuses = context['custom_statuses'][role]
@@ -379,17 +387,23 @@ def modify_custom_status(context, role, status_name, change):
        Example: modify_custom_status(ATTACKER_ROLE, 'Charge', 1) -- Increment charge counter
     """
     if role not in context.get('custom_statuses', {}):
+        # Use logger for internal error
         logger.warning(f"Lua API Error: Invalid role '{role}' used in modify_custom_status.")
+        # log(context, f"Invalid role '{role}' used in modify_custom_status", "error") # REMOVED
         return
     if not isinstance(change, (int, float)):
+        # Use logger for internal error
         logger.warning(f"Lua API Error: Invalid change value '{change}' (must be number) used in modify_custom_status for status '{status_name}'.")
+        # log(context, f"Invalid change value '{change}' (must be number) used in modify_custom_status", "error") # REMOVED
         return
         
     player_statuses = context['custom_statuses'][role]
     current_value = player_statuses.get(status_name, 0) # Default to 0 if not present
     
     if not isinstance(current_value, (int, float)):
+        # Use logger for internal error
         logger.warning(f"Lua API Error: Cannot modify non-numeric status '{status_name}' (value: {current_value}) with modify_custom_status.")
+        # log(context, f"Cannot modify non-numeric status '{status_name}' (value: {current_value}) with modify_custom_status. Use set_custom_status.", "error") # REMOVED
         return
         
     new_value = current_value + change
@@ -398,20 +412,16 @@ def modify_custom_status(context, role, status_name, change):
     player_name = get_player_name(context, role) or role
     
 # --- NEW Momentum API Function ---
+
 @register_lua_api_func
 def get_momentum(context, role):
-    """Returns the current momentum for the specified player role (
-```'attacker'```
- or 
-```'target'```
-)."""
-    if role not in context.get("momentum", {}):
-        # Use logger for internal error
-        logger.warning(f"Lua API Error: Invalid role '{role}' used in get_momentum.") # Corrected f-string
-        return None
-    # Ensure the key exists before returning
-    return context["momentum"].get(role) # Safe access using .get()
-# --- End NEW Momentum API Function ---
+    """Returns the current momentum for the specified player role.
+       Ensure roles are validated before calling or handle potential KeyError.
+    """
+    if role not in context.get('momentum', {}):
+        logger.warning(f"Lua API Error: Invalid role '{{role}}' used in get_momentum.")
+        return 0
+    return context['momentum'][role]
 
 # --- Update Lua Execution Function --- 
 
@@ -502,6 +512,7 @@ def execute_lua_script(script_content, battle, current_player, opponent, current
                     error_message = f"Lua API Call Error in '{func_name}': {e}"
                     # print(error_message)
                     # Append error to context logs as well?
+                    # log(script_context, error_message, effect_type='error', source='api_wrapper')
                     raise lupa.LuaError(error_message) # Raise LuaError to propagate
             return wrapper
 
@@ -550,23 +561,25 @@ def execute_lua_script(script_content, battle, current_player, opponent, current
             # Apply Momentum changes
             setattr(battle, f'current_momentum_{current_player_role}', battle_context['momentum'][current_player_role])
             setattr(battle, f'current_momentum_{opponent_role}', battle_context['momentum'][opponent_role])
-            # Apply Stat Stage changes
+            # Apply Stat Stage changes (Convert back to dict)
             if current_player_role == 'player1':
-                battle.stat_stages_player1 = battle_context['stat_stages'][current_player_role]
-                battle.stat_stages_player2 = battle_context['stat_stages'][opponent_role]
-                # --- Apply Custom Status Changes ---
-                battle.custom_statuses_player1 = battle_context['custom_statuses'][current_player_role]
-                battle.custom_statuses_player2 = battle_context['custom_statuses'][opponent_role]
+                battle.stat_stages_player1 = dict(battle_context['stat_stages'][current_player_role])
+                battle.stat_stages_player2 = dict(battle_context['stat_stages'][opponent_role])
+                # --- Apply Custom Status Changes (Convert back to dict) ---
+                battle.custom_statuses_player1 = dict(battle_context['custom_statuses'][current_player_role])
+                battle.custom_statuses_player2 = dict(battle_context['custom_statuses'][opponent_role])
             else: # current_player_role == 'player2'
-                battle.stat_stages_player2 = battle_context['stat_stages'][current_player_role]
-                battle.stat_stages_player1 = battle_context['stat_stages'][opponent_role]
-                 # --- Apply Custom Status Changes ---
-                battle.custom_statuses_player2 = battle_context['custom_statuses'][current_player_role]
-                battle.custom_statuses_player1 = battle_context['custom_statuses'][opponent_role]
+                battle.stat_stages_player2 = dict(battle_context['stat_stages'][current_player_role])
+                battle.stat_stages_player1 = dict(battle_context['stat_stages'][opponent_role])
+                 # --- Apply Custom Status Changes (Convert back to dict) ---
+                battle.custom_statuses_player2 = dict(battle_context['custom_statuses'][current_player_role])
+                battle.custom_statuses_player1 = dict(battle_context['custom_statuses'][opponent_role])
             
-            # Note: We do NOT modify battle.registered_scripts here.
+            # Apply registered script changes (ensure it's a Python list)
+            # Ensure the list contains only JSON-serializable Python dicts
+            battle.registered_scripts = list(battle_context['registered_scripts']) 
             
-            print(f"    Applied changes: HP={battle_context['hp']}, Momentum={battle_context['momentum']}, Stages={battle_context['stat_stages']}, CustomStatuses={battle_context['custom_statuses']}") # Added statuses
+            print(f"    Applied changes: HP={{battle_context['hp']}}, Momentum={{battle_context['momentum']}}, Stages={{battle_context['stat_stages']}}, CustomStatuses={{battle_context['custom_statuses']}}") # Added statuses
         else:
             print(f"    Script {script_name} reported no state changes.")
 

@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import HomeView from '../views/HomeView.vue'
 import LoginView from '../views/LoginView.vue'
 import RegisterView from '../views/RegisterView.vue'
+import BattleView from '../views/BattleView.vue'
 import { useAuthStore } from '@/stores/auth'
 
 const router = createRouter({
@@ -28,21 +29,9 @@ const router = createRouter({
     {
       path: '/battle/:id',
       name: 'battle',
-      component: () => import('../views/BattleView.vue'),
+      component: BattleView,
       meta: { requiresAuth: true },
       props: true
-    },
-    {
-      path: '/leaderboard',
-      name: 'leaderboard',
-      component: () => import('../views/LeaderboardView.vue'),
-      meta: { requiresAuth: false }
-    },
-    {
-      path: '/attack-creator',
-      name: 'attack-creator',
-      component: () => import('../views/AttackCreatorView.vue'),
-      meta: { requiresAuth: true }
     }
   ],
 })

@@ -1,11 +1,30 @@
 <script setup>
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import UserProfileStatsEditor from '@/components/UserProfileStatsEditor.vue';
+import { useAuthStore } from '@/stores/auth';
 
 const props = defineProps({
   user: {
     type: Object,
     required: true
+  }
+});
+
+const authStore = useAuthStore();
+const isUpdatingBotOptIn = ref(false);
+
+const allowBotChallengesModel = computed({
+  get: () => props.user?.allow_bot_challenges ?? false,
+  async set(newValue) {
+    if (!props.user) return;
+    isUpdatingBotOptIn.value = true;
+    const success = await authStore.updateUserProfile({ allow_bot_challenges: newValue });
+    if (!success) {
+      console.error('Failed to update bot challenge preference');
+    } else {
+       // Optionally show success feedback
+    }
+    isUpdatingBotOptIn.value = false;
   }
 });
 
@@ -33,6 +52,20 @@ const props = defineProps({
 
         <!-- Embed Stats Editor directly -->
         <UserProfileStatsEditor />
+
+        <!-- NEW: Allow Bot Challenges Toggle -->
+        <div class="bot-challenge-toggle">
+          <label for="allow-bot-challenge-checkbox">
+            <input 
+              type="checkbox" 
+              id="allow-bot-challenge-checkbox" 
+              v-model="allowBotChallengesModel" 
+              :disabled="isUpdatingBotOptIn"
+            />
+            Allow others to fight me as an AI
+          </label>
+          <span v-if="isUpdatingBotOptIn" class="loading-indicator">⚙️</span>
+        </div>
       </div>
       <div v-else>
         <p>Loading user profile...</p>
@@ -118,6 +151,37 @@ const props = defineProps({
     font-weight: bold;
     color: var(--color-heading);
     line-height: 1.1;
+}
+
+.bot-challenge-toggle {
+  margin-top: 2rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--color-border);
+  text-align: center;
+}
+
+.bot-challenge-toggle label {
+  cursor: pointer;
+  display: inline-flex; /* Align checkbox and text */
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.bot-challenge-toggle input[type="checkbox"] {
+  cursor: pointer;
+  width: 1rem;
+  height: 1rem;
+}
+
+.loading-indicator {
+    display: inline-block;
+    margin-left: 0.5rem;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 </style> 

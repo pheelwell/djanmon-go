@@ -24,6 +24,41 @@
         </small>
       </div>
 
+
+      <!-- Generated Attacks Preview -->
+      <div v-if="generatedAttacks.length > 0 && !isLoading" class="generated-attacks-preview">
+          <h3>Generated Attacks Preview:</h3>
+          <!-- Desktop Grid -->
+          <div class="attack-display-desktop">
+            <AttackGrid
+                :attacks="generatedAttacks"
+                mode="reveal"
+                :revealedIds="revealedAttackIds"
+                @reveal="revealedAttackIds.add($event)"
+                class="generated-attack-display"
+            />
+          </div>
+           <!-- Mobile List -->
+          <div class="attack-display-mobile">
+              <AttackListMobile 
+                  :attacks="generatedAttacks" 
+                  mode="display"
+              />
+          </div>
+          <!-- Removed old grid and transition -->
+          <p class="preview-footer">These attacks have been added to your collection.</p>
+      </div>
+
+      <button 
+        type="submit" 
+        :disabled="isLoading || !concept.trim() || !hasEnoughCredits || remainingChars < 0" 
+        class="button button-primary open-booster-button"
+        :class="{ 'disabled-look': isLoading || !concept.trim() || !hasEnoughCredits || remainingChars < 0 }"
+      >
+        <span class="button-icon">🎁</span>
+        {{ isLoading ? 'Opening...' : `Open Booster for ${BOOSTER_COST} 💰` }}
+      </button>
+
       <!-- Favorite Attacks Selection -->
       <div v-if="userAttacks.length > 0" class="form-group favorite-attacks-section full-width">
         <label>Select Favorite Attacks (Optional, Max {{ MAX_FAVORITES }} for Inspiration):</label>
@@ -38,44 +73,30 @@
           />
         </div>
 
-        <!-- Use AttackGrid for selection - Pass filtered attacks -->
-        <AttackGrid 
-            :attacks="filteredUserAttacks"
-            mode="select"
-            v-model:selectedIds="selectedFavoriteAttackIds"
-            :maxSelectable="MAX_FAVORITES"
-            class="favorite-attack-selector"
-        />
+        <!-- Desktop Grid -->
+        <div class="attack-display-desktop">
+            <AttackGrid 
+                :attacks="filteredUserAttacks"
+                mode="select"
+                v-model:selectedIds="selectedFavoriteAttackIds"
+                :maxSelectable="MAX_FAVORITES"
+                class="favorite-attack-selector"
+            />
+        </div>
+        <!-- Mobile List -->
+        <div class="attack-display-mobile">
+            <AttackListMobile
+                :attacks="filteredUserAttacks"
+                mode="action"
+                @attackClick="toggleFavoriteSelection($event)"
+                :disabledIds="new Set(selectedFavoriteAttackIds)"
+                class="favorite-attack-selector-mobile"
+            />
+        </div>
          <small class="selection-counter">{{ selectedFavoriteAttackIds.length }} / {{ MAX_FAVORITES }} selected</small>
       </div>
       <!-- End Favorite Attacks Selection -->
-
-      <button 
-        type="submit" 
-        :disabled="isLoading || !concept.trim() || !hasEnoughCredits || remainingChars < 0" 
-        class="button button-primary open-booster-button"
-        :class="{ 'disabled-look': isLoading || !concept.trim() || !hasEnoughCredits || remainingChars < 0 }"
-      >
-        <span class="button-icon">🎁</span>
-        {{ isLoading ? 'Opening...' : `Open Booster for ${BOOSTER_COST} 💰` }}
-      </button>
     </form>
-
-    <!-- Generated Attacks Preview -->
-    <div v-if="generatedAttacks.length > 0 && !isLoading" class="generated-attacks-preview">
-        <h3>Generated Attacks Preview:</h3>
-        <!-- Use AttackGrid for reveal -->
-        <AttackGrid
-            :attacks="generatedAttacks"
-            mode="reveal"
-            :revealedIds="revealedAttackIds"
-            @reveal="revealedAttackIds.add($event)"
-            class="generated-attack-display"
-        />
-        <!-- Removed old grid and transition -->
-        <p class="preview-footer">These attacks have been added to your collection.</p>
-    </div>
-
   </div>
 </template>
 
@@ -85,6 +106,7 @@ import { useGameStore } from '@/stores/game';
 import { useAuthStore } from '@/stores/auth';
 import AttackCardDisplay from '@/components/AttackCardDisplay.vue';
 import AttackGrid from '@/components/AttackGrid.vue';
+import AttackListMobile from '@/components/AttackListMobile.vue';
 
 const gameStore = useGameStore();
 const authStore = useAuthStore();
@@ -123,6 +145,20 @@ const filteredUserAttacks = computed(() => {
   );
 });
 
+// --- NEW: Mobile Favorite Selection Handler ---
+function toggleFavoriteSelection(attack) {
+  const index = selectedFavoriteAttackIds.value.indexOf(attack.id);
+  if (index > -1) {
+    // Deselect
+    selectedFavoriteAttackIds.value.splice(index, 1);
+  } else {
+    // Select if not full
+    if (selectedFavoriteAttackIds.value.length < MAX_FAVORITES) {
+      selectedFavoriteAttackIds.value.push(attack.id);
+    }
+  }
+}
+
 async function handleSubmit() {
   error.value = null;
   successMessage.value = null;
@@ -138,7 +174,6 @@ async function handleSubmit() {
       throw new Error("Not enough credits.");
     }
     // Use concept for name generation in backend, or generate unique name here
-    // For now, just pass concept as both name and concept to backend
     const generatedName = concept.value.trim().substring(0, 50); // Use trimmed concept as name (up to 50 chars)
     const result = await gameStore.generateAttacks(
         concept.value, // Pass the concept text
@@ -159,22 +194,12 @@ async function handleSubmit() {
 }
 
 onMounted(async () => {
-    // Clear any previous messages when component mounts
     error.value = null;
     successMessage.value = null;
     generatedAttacks.value = [];
     revealedAttackIds.value.clear();
     selectedFavoriteAttackIds.value = [];
     favoriteSearchQuery.value = '';
-
-    // REMOVED: Fetch user attacks (now assumed to be in authStore.currentUser)
-    // if (gameStore.userAttacks === null || gameStore.userAttacks.length === 0) {
-    //     try {
-    //         await gameStore.fetchUserAttacks(); 
-    //     } catch (fetchError) {
-    //         console.error("Failed to fetch user attacks:", fetchError);
-    //     }
-    // }
 });
 
 </script>
@@ -365,12 +390,10 @@ onMounted(async () => {
   padding-top: 1rem;
   border-top: 1px solid #444;
   width: 100%;
-  /* max-width: 600px; */ /* REMOVED max-width */
 }
 
 /* Ensure full-width section is centered like the form */
 .favorite-attacks-section.full-width {
-  /* max-width: 700px; */ /* <-- Ensure this line is removed or commented out */
   margin: 1.5rem auto 0 auto; /* Keep centering and margin top */
 }
 
@@ -398,19 +421,12 @@ onMounted(async () => {
 /* Style the AttackGrid component specifically for favorites if needed */
 .favorite-attack-selector {
   /* Specific styles for the AttackGrid container in this view */
-  /* REMOVED: max-height: 300px; */
-  /* REMOVED: overflow-y: auto; */
   border: 1px solid var(--color-border-hover);
   border-radius: 8px;
   padding: 0.5rem;
   margin-top: 0.5rem;
 }
 
-/* Remove old grid item styles */
-/* .attack-selection-grid { ... } */
-/* .attack-checkbox-item { ... } */
-/* .attack-checkbox-label { ... } */
-/* .selection-indicator { ... } */
 
 /* Keep counter style */
 .selection-counter {
@@ -421,5 +437,19 @@ onMounted(async () => {
   text-align: right;
 }
 /* End Styles for Favorite Attack Selection */
+
+/* --- Responsive Display Toggle for Attacks --- */
+.attack-display-mobile {
+    display: none; /* Hidden by default */
+}
+
+@media (max-width: 768px) { /* Or your preferred mobile breakpoint */
+    .attack-display-desktop {
+        display: none; /* Hide grid on mobile */
+    }
+    .attack-display-mobile {
+        display: block; /* Show list on mobile */
+    }
+}
 
 </style> 

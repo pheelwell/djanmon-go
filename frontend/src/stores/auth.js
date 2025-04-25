@@ -1,13 +1,15 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import apiClient from '@/services/api'; // Adjust path if needed
+import { logoutUser as apiLogoutUser } from '@/services/api'; // Import specific API function
 import router from '@/router';
 
 export const useAuthStore = defineStore('auth', () => {
-  // --- State --- 
-  const accessToken = ref(localStorage.getItem('accessToken') || null);
-  const refreshToken = ref(localStorage.getItem('refreshToken') || null);
-  const user = ref(JSON.parse(localStorage.getItem('user') || 'null'));
+  // --- State ---
+  // Remove token state
+  // const accessToken = ref(localStorage.getItem('accessToken') || null);
+  // const refreshToken = ref(localStorage.getItem('refreshToken') || null);
+  const user = ref(JSON.parse(localStorage.getItem('user') || 'null')); // Keep user state
   const loginError = ref(null);
   const registerError = ref(null);
   const isUpdatingMoveset = ref(false);
@@ -15,44 +17,52 @@ export const useAuthStore = defineStore('auth', () => {
   const isUpdatingStats = ref(false);
   const statsUpdateError = ref(null);
 
-  // --- Getters --- 
-  const isAuthenticated = computed(() => !!accessToken.value);
+  // --- Getters ---
+  // Update isAuthenticated to check for user object instead of token
+  const isAuthenticated = computed(() => !!user.value);
   const currentUser = computed(() => user.value);
 
-  // --- Actions --- 
+  // --- Actions ---
 
   async function login(username, password) {
-    loginError.value = null; // Reset error
+    loginError.value = null;
     try {
       const response = await apiClient.post('/users/login/', {
         username,
         password,
       });
-      accessToken.value = response.data.access;
-      refreshToken.value = response.data.refresh;
-      localStorage.setItem('accessToken', accessToken.value);
-      localStorage.setItem('refreshToken', refreshToken.value);
-      // Fetch user profile after successful login
-      await fetchUserProfile(); 
+      // No tokens to store
+      // accessToken.value = response.data.access;
+      // refreshToken.value = response.data.refresh;
+      // localStorage.setItem('accessToken', accessToken.value);
+      // localStorage.setItem('refreshToken', refreshToken.value);
+      
+      // Backend now returns user data on successful login
+      user.value = response.data;
+      localStorage.setItem('user', JSON.stringify(user.value)); 
+      // No need to explicitly call fetchUserProfile here anymore
+      // await fetchUserProfile(); 
       return true;
     } catch (error) {
       console.error('Login failed:', error.response?.data || error.message);
       loginError.value = error.response?.data || { detail: 'Login failed. Please check credentials.' };
-      logout(); // Clear any potentially partially set state
+      // Clear user state on failed login attempt
+      user.value = null;
+      localStorage.removeItem('user');
       return false;
     }
   }
 
   async function register(username, password, password2, email = '') {
-    registerError.value = null; // Reset error
+    registerError.value = null; 
     try {
       await apiClient.post('/users/register/', {
         username,
         password,
         password2,
-        email, // Include email if provided
+        email, 
       });
-      // Optionally log the user in automatically after registration
+      // Don't auto-login, let user log in separately
       // await login(username, password);
       return true;
     } catch (error) {
@@ -63,79 +73,63 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   async function fetchUserProfile() {
-    if (!accessToken.value) return; // Don't fetch if not logged in
-
+    // Fetching profile is still useful on app load if a session exists,
+    // or after certain actions to get updated data.
     try {
-      // Add Authorization header dynamically for this request
-      const response = await apiClient.get('/users/me/', {
-        headers: { Authorization: `Bearer ${accessToken.value}` }
-      });
+      // apiClient now handles auth via cookies + csrf
+      const response = await apiClient.get('/users/me/');
       user.value = response.data;
       localStorage.setItem('user', JSON.stringify(user.value));
     } catch (error) {
       console.error('Failed to fetch user profile:', error.response?.data || error.message);
-      // Handle error, maybe token expired? Consider logout or refresh token logic here
-      if (error.response && error.response.status === 401) {
-         // Attempt refresh token or logout
-         // console.log('Token might be expired, attempting refresh or logout...');
-         logout(); // Simple logout for now
-      }
+      // If fetching profile fails (e.g., 401/403), it implies no valid session.
+      // Clear local user state.
+      user.value = null; // Clear user state
+      localStorage.removeItem('user'); // Clear stored user data
+      // The global response interceptor might also trigger logout/redirect
     }
   }
 
-  function logout() {
-    accessToken.value = null;
-    refreshToken.value = null;
-    user.value = null;
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('refreshToken');
-    localStorage.removeItem('user');
-    // Optionally redirect to login page using router
-    // import router from '@/router'; // Be careful with imports inside functions
-    // router.push('/login');
+  async function logout() {
+    try {
+        await apiLogoutUser(); // Call the specific API function for logout
+    } catch (error) {
+        console.error("Logout API call failed:", error.response?.data || error.message);
+        // Still clear local state even if API call fails
+    } finally {
+        // Clear local state regardless of API call success/failure
+        // accessToken.value = null;
+        // refreshToken.value = null;
+        user.value = null;
+        // localStorage.removeItem('accessToken');
+        // localStorage.removeItem('refreshToken');
+        localStorage.removeItem('user');
+        
+        // Redirect to login page
+        router.push({ name: 'login' }); 
+    }
   }
 
   // --- Refresh Token Logic (Placeholder) --- 
+  // REMOVE THIS SECTION
   // async function refreshTokenIfNeeded() { ... }
 
   // --- Initialization --- 
-  // Attempt to fetch user profile if tokens exist on store initialization
-  if (accessToken.value) {
-    fetchUserProfile();
-  }
+  // Remove direct fetchUserProfile call here. Let app initialization handle it if needed.
+  // if (accessToken.value) {
+  //   fetchUserProfile();
+  // }
 
-  // Add interceptor to apiClient to automatically add auth header
-  apiClient.interceptors.request.use(config => {
-    if (accessToken.value) {
-      config.headers.Authorization = `Bearer ${accessToken.value}`;
-    }
-    return config;
-  }, error => {
-    return Promise.reject(error);
-  });
+  // --- Remove Store-Specific Interceptors --- 
+  // Remove the JWT request interceptor previously added here.
+  // The global interceptors in api.js handle session/CSRF now.
+  // apiClient.interceptors.request.use(config => { ... });
 
-  // Add response interceptor to handle 401 errors globally
-  apiClient.interceptors.response.use(
-    response => response, // Simply return successful responses
-    error => {
-      // Check if the error is a 401 Unauthorized
-      if (error.response && error.response.status === 401) {
-        // Check if the failed request was *not* for login or token refresh itself,
-        // to avoid potential logout loops on failed login/refresh attempts.
-        const originalRequestUrl = error.config.url;
-        if (!originalRequestUrl.includes('/users/login')) { // Add refresh check if implemented
-            console.log('API request unauthorized (401). Logging out.');
-            logout();
-             // Optionally, redirect here as well, though logout already handles it conceptually
-             // router.push({ name: 'login' });
-        }
-      }
-      // Important: Return the error so other error handling can occur if needed
-      return Promise.reject(error);
-    }
-  );
+  // Remove the response interceptor previously added here.
+  // A global one might still be useful in api.js or main.js.
+  // apiClient.interceptors.response.use(response => response, error => { ... });
 
-  // NEW ACTION: Update selected attacks
+  // --- Existing Actions (Keep as is, they use apiClient which now handles auth) ---
   async function updateSelectedAttacks(attackIds) {
     if (!isAuthenticated.value) return;
 
@@ -144,21 +138,16 @@ export const useAuthStore = defineStore('auth', () => {
 
     try {
       const response = await apiClient.put('/users/me/selected-attacks/', { attack_ids: attackIds });
-      // Update the currentUser state with the full profile returned by the backend
       user.value = response.data; 
-      localStorage.setItem('user', JSON.stringify(response.data)); // Update local storage too
-      // Optionally show a success message?
+      localStorage.setItem('user', JSON.stringify(response.data));
     } catch (error) {
       console.error('Failed to update selected attacks:', error.response?.data || error.message);
       movesetUpdateError.value = error.response?.data || {'detail': 'Could not save moveset.'};
-      // Optionally re-fetch profile to revert optimistic update if needed?
-      // await fetchUserProfile();
     } finally {
       isUpdatingMoveset.value = false;
     }
   }
 
-  // NEW ACTION: Update user stats
   async function updateUserStats(statsData) {
     if (!isAuthenticated.value) return;
 
@@ -166,25 +155,42 @@ export const useAuthStore = defineStore('auth', () => {
     statsUpdateError.value = null;
 
     try {
-      // Use the existing apiClient instance which includes auth headers
       const response = await apiClient.patch('/users/me/stats/', statsData);
-      // Update the currentUser state with the full profile returned by the backend
-      user.value = response.data; 
-      localStorage.setItem('user', JSON.stringify(response.data)); // Update local storage too
+      if (user.value && response.data) {
+          for (const key in response.data) {
+              if (Object.hasOwnProperty.call(response.data, key) && key in user.value) {
+                  user.value[key] = response.data[key];
+              }
+          }
+          localStorage.setItem('user', JSON.stringify(user.value)); 
+      } else {
+           console.warn("Could not merge stats: user state or response data missing.");
+           await fetchUserProfile(); 
+      }
     } catch (error) {
       console.error('Failed to update user stats:', error.response?.data || error.message);
       statsUpdateError.value = error.response?.data || {'detail': 'Could not save stats.'};
-      // Optionally re-fetch profile on error to ensure consistency?
-      // await fetchUserProfile(); 
     } finally {
       isUpdatingStats.value = false;
     }
   }
 
+  async function updateUserProfile(profileData) {
+    if (!isAuthenticated.value) return false; // Or throw error?
+
+    try {
+      const response = await apiClient.patch('/users/me/', profileData);
+      user.value = response.data; 
+      localStorage.setItem('user', JSON.stringify(response.data));
+      return true;
+    } catch (error) {
+      console.error('Failed to update user profile:', error.response?.data || error.message);
+      return false;
+    }
+  }
+
   return {
-    // State refs
-    accessToken,
-    refreshToken,
+    // State refs (Tokens removed)
     user,
     loginError,
     registerError,
@@ -193,16 +199,17 @@ export const useAuthStore = defineStore('auth', () => {
     isUpdatingStats,
     statsUpdateError,
 
-    // Getters (computed)
+    // Getters (isAuthenticated logic updated)
     isAuthenticated,
     currentUser,
 
-    // Actions
+    // Actions (Login/Logout updated, fetchUserProfile potentially called differently)
     login,
     logout,
     register,
     fetchUserProfile,
     updateSelectedAttacks,
-    updateUserStats
+    updateUserStats,
+    updateUserProfile
   };
 }); 

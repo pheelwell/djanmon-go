@@ -8,6 +8,10 @@ const props = defineProps({
     type: Array,
     default: () => []
   },
+  attackLeaderboardData: {
+    type: Array,
+    default: () => []
+  },
   isLoading: {
     type: Boolean,
     default: false
@@ -26,14 +30,11 @@ function handleMouseEnter(attack, event) {
     hoverTimeoutId.value = null;
   }
   hoveredAttack.value = attack;
-  // Calculate position based on the triggering element (e.g., the emoji span)
-  const rect = event.target.getBoundingClientRect();
+  // No longer need position calculation based on event
+
   hoverCardStyle.value = {
-    // Position below and slightly offset from the element
-    left: `${rect.left + window.scrollX}px`, 
-    top: `${rect.bottom + window.scrollY + 8}px`, // 8px offset below
+    // Only control visibility/opacity now
     opacity: 1,
-    transform: 'translateY(0)',
     visibility: 'visible' // Ensure it's visible
   };
 }
@@ -43,9 +44,8 @@ function handleMouseLeave() {
   hoverTimeoutId.value = setTimeout(() => {
     hoveredAttack.value = null;
     hoverCardStyle.value = {
-        ...hoverCardStyle.value,
+        // Only control visibility/opacity now
         opacity: 0,
-        transform: 'translateY(10px)',
         visibility: 'hidden' // Hide it
     };
   }, 150); // 150ms delay
@@ -69,15 +69,14 @@ function handleCardMouseLeave() {
 <template>
   <section class="leaderboard-table-section">
     <h2>Top Players</h2>
-    <div v-if="isLoading" class="loading">Loading leaderboard...</div>
-    <table v-else-if="leaderboardData && leaderboardData.length > 0" class="leaderboard-table">
+    <div v-if="isLoading && leaderboardData.length === 0" class="loading">Loading leaderboard...</div>
+    <table v-else-if="leaderboardData && leaderboardData.length > 0" class="leaderboard-table user-leaderboard">
       <thead>
         <tr>
           <th>#</th>
-          <th>Username</th>
-          <th>Level</th>
+          <th>Name</th>
           <th>Wins</th>
-          <th>Current Loadout</th>
+          <th>Atks</th>
         </tr>
       </thead>
       <tbody>
@@ -87,7 +86,6 @@ function handleCardMouseLeave() {
             {{ user.username }}
             <span v-if="user.is_bot" class="bot-label">(BOT)</span>
           </td>
-          <td>{{ user.level }}</td>
           <td>{{ user.total_wins }}</td>
           <td class="loadout-cell">
             <span v-if="!user.selected_attacks || user.selected_attacks.length === 0">-</span>
@@ -104,7 +102,7 @@ function handleCardMouseLeave() {
         </tr>
       </tbody>
     </table>
-    <div v-else class="no-data-message">
+    <div v-else-if="!isLoading" class="no-data-message">
       No player data available yet.
     </div>
 
@@ -120,6 +118,41 @@ function handleCardMouseLeave() {
     </div>
 
   </section>
+
+  <!-- NEW: Attack Leaderboard Section -->
+  <section class="leaderboard-table-section attack-leaderboard-section">
+    <h2>Top Attacks</h2>
+    <div v-if="isLoading && attackLeaderboardData.length === 0" class="loading">Loading attack stats...</div>
+    <table v-else-if="attackLeaderboardData && attackLeaderboardData.length > 0" class="leaderboard-table attack-leaderboard">
+      <thead>
+        <tr>
+          <th>Attack</th>
+          <th>Owner</th>
+          <th>Used</th>
+          <th>Wins</th>
+        </tr>
+      </thead>
+      <tbody>
+        <!-- Example structure, replace with actual data fields -->
+        <tr v-for="(attackStat, index) in attackLeaderboardData" :key="attackStat.attack_id || index">
+          <td>
+            <span class="attack-item" 
+                  @mouseenter="handleMouseEnter(attackStat.attack_details, $event)" 
+                  @mouseleave="handleMouseLeave">
+              {{ attackStat.attack_details?.emoji || '' }} {{ attackStat.attack_details?.name || 'Unknown' }}
+            </span>
+          </td>
+          <td>{{ attackStat.owner_username || '-' }}</td>
+          <td>{{ attackStat.times_used ?? '-' }}</td>
+          <td>{{ attackStat.total_wins ?? '-' }}</td> 
+        </tr>
+      </tbody>
+    </table>
+    <div v-else-if="!isLoading" class="no-data-message">
+      No attack data available yet.
+    </div>
+  </section>
+
 </template>
 
 <style scoped>
@@ -184,22 +217,27 @@ h2 {
   width: 80px;
 }
 
-.leaderboard-table td:last-child { /* Loadout */
-    font-size: 0.9em;
-    color: var(--color-text-muted);
-}
-
 .loadout-cell {
     position: relative; /* Needed for absolute positioning of children/card */
+    vertical-align: middle; /* Vertically center content */
+}
+
+.user-leaderboard td:last-child, /* Loadout Specifics */
+.user-leaderboard th:last-child {
+    font-size: 1.1em; /* Increase emoji size slightly */
+    color: var(--color-text); /* Make emojis normal text color */
+    text-align: left; /* Align emojis left */
+    width: 150px; 
 }
 
 .attack-item {
     cursor: default; /* Indicate interactivity */
     display: inline-block; /* Allow spacing */
     margin-right: 0.5em; /* Space between attack items */
-    padding: 0.1em 0.3em;
+    padding: 0 0.3em; 
     border-radius: 3px;
     transition: background-color 0.2s;
+    line-height: 1; /* Prevent extra line height */
 }
 
 .attack-item:hover {
@@ -208,23 +246,24 @@ h2 {
 
 /* Styles for the hover popup wrapper */
 .attack-hover-popup {
-  position: absolute;
+  position: fixed; 
+  top: 50%;      /* Keep vertically centered */
+  left: 20px;     /* Position from left edge */
+  transform: translateY(-50%); /* Only vertical centering needed */
   background-color: var(--color-background);
   border: 1px solid var(--color-border-hover);
   border-radius: 8px;
-  padding: 0.8rem; /* Match wrapper padding */
+  padding: 0.8rem; 
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-  z-index: 10; /* Ensure it's on top */
-  pointer-events: none; /* Prevent interaction with the popup */
-  opacity: 0; /* Hidden by default, controlled by style binding */
-  transition: opacity 0.2s ease-in-out, transform 0.2s ease-in-out;
-  transform: translateY(10px);
-  /* Set a min/max width if needed, or let content decide */
+  z-index: 1000; 
+  pointer-events: auto; 
+  opacity: 0; 
+  transition: opacity 0.2s ease-in-out, visibility 0.2s ease-in-out;
+  visibility: hidden; 
   min-width: 140px;
-  max-width: 200px; /* Example max width */
-  /* Set a fixed height to match other cards */
-  height: 180px; /* Match AttackCreatorView, adjust if needed */
-  display: flex; /* Ensure content inside centers if needed */
+  max-width: 200px; 
+  height: 180px; 
+  display: flex; 
   justify-content: center;
   align-items: center;
 }
@@ -234,6 +273,44 @@ h2 {
   font-size: 0.9em;
   color: var(--color-text-mute);
   margin-left: 0.3em;
+}
+
+.leaderboard-table-section {
+    margin-bottom: 2.5rem; /* Add space between sections */
+}
+
+.leaderboard-table-section:last-child {
+    margin-bottom: 0; /* Remove bottom margin from the last section */
+}
+
+/* Optional: Add specific styles if needed */
+.user-leaderboard {
+  /* styles specific to user table */
+}
+
+.attack-leaderboard {
+  /* styles specific to attack table */
+}
+
+/* Adjust column widths for the new attack table */
+.attack-leaderboard th:nth-child(1), /* Attack Name */
+.attack-leaderboard td:nth-child(1) {
+  width: auto; /* Let it take available space */
+  text-align: left;
+}
+
+.attack-leaderboard th:nth-child(2), /* Owner */
+.attack-leaderboard td:nth-child(2) {
+  width: 120px; 
+  text-align: left;
+}
+
+.attack-leaderboard th:nth-child(3), /* Used */
+.attack-leaderboard td:nth-child(3),
+.attack-leaderboard th:nth-child(4), /* Wins */
+.attack-leaderboard td:nth-child(4) {
+  width: 80px;
+  text-align: center;
 }
 
 </style> 

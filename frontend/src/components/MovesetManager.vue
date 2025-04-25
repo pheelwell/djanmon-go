@@ -7,6 +7,8 @@ import { useAuthStore } from '@/stores/auth';
 // import api from '@/services/api'; 
 import AttackCardDisplay from './AttackCardDisplay.vue';
 import AttackGrid from './AttackGrid.vue';
+import AttackListMobile from './AttackListMobile.vue'; // <-- Import Mobile List
+import { debounce } from 'lodash-es'; // <-- Import debounce
 
 const authStore = useAuthStore();
 
@@ -26,6 +28,11 @@ const MAX_SELECTED = 6;
 
 // --- Computed property for Count ---
 const selectedCount = computed(() => selectedInEditor.value.length);
+
+// --- NEW: Computed property for Selected IDs Set ---
+const selectedAttackIdsSet = computed(() => {
+    return new Set(selectedInEditor.value.map(attack => attack.id));
+});
 
 // --- Methods ---
 const initializeEditorLists = () => {
@@ -113,81 +120,130 @@ const filterAvailableAttacks = () => {
     }
 };
 
-// --- Save Logic --- 
-const saveSelection = async () => {
+// --- Save Logic (Modified for auto-save) --- 
+// Debounced save function
+const debouncedSaveSelection = debounce(async () => {
+    if (isSaving.value) return; // Prevent concurrent saves
     isSaving.value = true;
     error.value = null;
     successMessage.value = null;
 
     const selectedIds = selectedInEditor.value.map(attack => attack.id);
-    // console.log("Saving selection:", selectedIds);
+    // console.log("Auto-saving selection:", selectedIds);
 
     try {
-        // Call the store action to update backend and store state
         await authStore.updateSelectedAttacks(selectedIds);
-        successMessage.value = 'Moveset saved successfully!';
-        setTimeout(() => successMessage.value = null, 3000);
-        // Watcher should handle re-initializing lists if store update is successful
+        // successMessage.value = 'Moveset auto-saved!'; // Optional: subtle feedback?
+        // setTimeout(() => successMessage.value = null, 2000);
     } catch (err) {
-        console.error("Failed to save moveset:", err);
-        error.value = err.response?.data?.detail || 'Failed to save moveset.';
-        // If save fails, we might want to revert local state to match the store again
+        console.error("Failed to auto-save moveset:", err);
+        error.value = err.response?.data?.detail || 'Failed to auto-save moveset.';
+        // Attempt to revert on error
         initializeEditorLists(); 
     } finally {
         isSaving.value = false;
     }
-};
+}, 1000); // Debounce for 1 second (adjust as needed)
 
 // --- Lifecycle --- 
 onMounted(() => {
     initializeEditorLists();
 });
 
-// Watch relevant parts of the user object from the store
+// --- Watchers --- 
+
+// Watch for changes in the EDITOR's selected list and trigger auto-save
+watch(selectedInEditor, (newValue, oldValue) => {
+    // Avoid saving on initial load or if lists are programmatically reset
+    if (oldValue && oldValue.length > 0 && JSON.stringify(newValue) !== JSON.stringify(oldValue)) {
+        debouncedSaveSelection();
+    }
+}, { deep: true });
+
+// Watch for EXTERNAL changes from the store (e.g., after a failed save revert)
 watch(() => user.value?.selected_attacks, (newSelection, oldSelection) => {
-    // Avoid re-initializing if the change was triggered by this component's save action
-    // Compare stringified versions to avoid infinite loops if arrays are structurally the same but different instances
-    const currentEditorIds = selectedInEditor.value.map(a => a.id);
-    if (JSON.stringify(newSelection || []) !== JSON.stringify(currentEditorIds)) {
-        // console.log("Store selected_attacks changed externally, re-initializing editor lists.");
+    // Convert both to comparable format (e.g., sorted array of IDs)
+    const storeIds = (newSelection || []).map(a => a?.id).filter(id => id !== undefined).sort();
+    const editorIds = selectedInEditor.value.map(a => a?.id).filter(id => id !== undefined).sort();
+
+    if (JSON.stringify(storeIds) !== JSON.stringify(editorIds)) {
+        // console.log("Store selected_attacks changed externally or after error, re-initializing editor lists.");
         initializeEditorLists();
     }
 }, { deep: true }); 
 
-// Watch for changes in all known attacks (less likely, but possible)
+// Watch for changes in all known attacks (unchanged)
 watch(() => user.value?.attacks, (newAttacks, oldAttacks) => {
-    // This assumes user.attacks changes if the user learns/forgets attacks
      if (JSON.stringify(newAttacks || []) !== JSON.stringify(oldAttacks || [])) {
-        // console.log("Store attacks changed, re-initializing editor lists.");
         initializeEditorLists();
      }
 }, { deep: true });
 
-// --- NEW: Watch Search Query ---
+// Watch Search Query (unchanged)
 watch(searchQuery, () => {
     filterAvailableAttacks();
 });
+
+// --- Mobile Click Handlers ---
+
+function handleMobileSelect(attack) {
+  // Check if we can add more
+  if (selectedInEditor.value.length >= MAX_SELECTED) {
+    error.value = `You can only select up to ${MAX_SELECTED} attacks.`;
+    setTimeout(() => error.value = null, 3000); // Clear error after 3s
+    return;
+  }
+
+  // Find and remove from available (both all and draggable)
+  const indexInAll = allAvailableAttacks.value.findIndex(a => a.id === attack.id);
+  if (indexInAll > -1) {
+    allAvailableAttacks.value.splice(indexInAll, 1);
+  }
+  const indexInDraggable = currentAvailableDraggable.value.findIndex(a => a.id === attack.id);
+  if (indexInDraggable > -1) {
+    currentAvailableDraggable.value.splice(indexInDraggable, 1);
+  }
+
+  // Add to selected
+  selectedInEditor.value.push(attack);
+  // Trigger debounced save (already watched, but call explicitly for immediate feedback if desired)
+  // debouncedSaveSelection(); 
+}
+
+function handleMobileDeselect(attack) {
+  // Find and remove from selected
+  const indexInSelected = selectedInEditor.value.findIndex(a => a.id === attack.id);
+  if (indexInSelected > -1) {
+    selectedInEditor.value.splice(indexInSelected, 1);
+
+    // Add back to the main available list (sorted? TBD - let's just add)
+    // Consider sorting logic if needed later
+    allAvailableAttacks.value.push(attack); 
+    // Re-apply filter to potentially add it back to the visible draggable list
+    filterAvailableAttacks(); 
+    // Trigger debounced save (already watched)
+    // debouncedSaveSelection(); 
+  }
+}
 
 </script>
 
 <template>
   <div class="moveset-manager">
-    <h2>Manage Moveset</h2>
 
     <!-- Error/Success Messages -->
     <div v-if="error" class="error-message">
         {{ error }}
     </div>
-    <div v-if="successMessage" class="success-message">
-       {{ successMessage }}
-    </div>
 
     <div class="manager-layout">
-        <!-- Selected Attacks Column (MOVED UP) -->
+        <!-- Selected Attacks Column -->
         <div class="attack-column selected-column">
-             <h3>Selected Attacks ({{ selectedCount }} / {{ MAX_SELECTED }})</h3>
+             <!-- Desktop Grid -->
+             <div class="attack-display-desktop">
             <AttackGrid
                 mode="drag"
+                :attacks="selectedInEditor"
                 v-model:draggableModel="selectedInEditor"
                 groupName="attacks"
                 class="selected-attack-grid selected-attacks-fixed-3"
@@ -198,15 +254,21 @@ watch(searchQuery, () => {
                     <div class="empty-list-message">Drag attacks here to select (Max {{ MAX_SELECTED }}).</div>
                 </template>
             </AttackGrid>
+             </div>
+             <!-- Mobile List -->
+             <div class="attack-display-mobile">
+                 <AttackListMobile
+                     :attacks="selectedInEditor"
+                     mode="action" 
+                     @attackClick="handleMobileDeselect"
+                 >
+                     <template #empty>
+                        <div class="empty-list-message">No attacks selected.</div>
+                    </template>
+                 </AttackListMobile>
+             </div>
         </div>
         
-        <!-- MOVED: Save Button directly under Selected Attacks -->
-        <div class="save-button-container">
-            <button @click="saveSelection" :disabled="isSaving" class="button button-primary save-button">
-              {{ isSaving ? 'Saving...' : 'Save Moveset' }}
-            </button>
-        </div>
-
         <!-- Available Attacks Column -->
         <div class="attack-column available-column">
             <h3>Available Attacks</h3>
@@ -221,8 +283,11 @@ watch(searchQuery, () => {
               />
             </div>
 
+            <!-- Desktop Grid -->
+            <div class="attack-display-desktop">
              <AttackGrid
                  mode="drag"
+                 :attacks="currentAvailableDraggable"
                  v-model:draggableModel="currentAvailableDraggable"
                  groupName="attacks"
                  class="available-attack-grid"
@@ -235,6 +300,22 @@ watch(searchQuery, () => {
                     </div>
                 </template>
              </AttackGrid>
+            </div>
+            <!-- Mobile List -->
+            <div class="attack-display-mobile">
+                 <AttackListMobile
+                     :attacks="currentAvailableDraggable"
+                     mode="action"
+                     @attackClick="handleMobileSelect"
+                     :disabledIds="selectedAttackIdsSet"
+                 >
+                     <template #empty>
+                         <div class="empty-list-message">
+                         {{ searchQuery ? 'No attacks match your search.' : 'No more attacks available.' }}
+                        </div>
+                    </template>
+                 </AttackListMobile>
+             </div>
         </div>
 
     </div>
@@ -366,34 +447,6 @@ watch(searchQuery, () => {
     opacity: 0.8; /* Make the original spot slightly transparent */
 }
 
-.save-button-container {
-    text-align: center; /* Center the save button */
-    margin-top: 0.5rem; /* REDUCED space above the button */
-}
-
-.save-button {
-    padding: 0.5rem 1.2rem; /* REDUCED padding */
-    font-size: 0.9em; /* REDUCED font size */
-}
-
-.error-message, .success-message {
-    padding: 0.8rem 1rem;
-    border-radius: 6px;
-    font-weight: 500;
-    text-align: center;
-    margin-bottom: 1rem;
-}
-.error-message {
-  background-color: var(--vt-c-red-soft);
-  color: var(--vt-c-red-dark);
-  border: 1px solid var(--vt-c-red);
-}
-.success-message {
-  background-color: var(--vt-c-green-soft);
-  color: var(--vt-c-green-dark);
-  border: 1px solid var(--vt-c-green);
-}
-
 .search-bar-container {
   margin-bottom: 1rem; /* Space below search bar */
   padding: 0 1rem; /* Align with grid padding */
@@ -470,6 +523,43 @@ watch(searchQuery, () => {
 .sortable-drag {
     cursor: grabbing !important;
     opacity: 0.8; /* Make the original spot slightly transparent */
+}
+
+/* Add Saving Indicator Style */
+.saving-indicator {
+  text-align: right;
+  font-style: italic;
+  color: var(--color-text-mute);
+  font-size: 0.9em;
+  margin-bottom: 0.5rem; /* Adjust spacing */
+  height: 1.2em; /* Reserve space to prevent layout shift */
+}
+.saving-indicator span {
+    display: inline-block;
+    animation: spin 1s linear infinite;
+    margin-right: 0.3em;
+}
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* --- Responsive Display Toggle --- */
+.attack-display-mobile {
+    display: none; /* Hidden by default */
+}
+
+@media (max-width: 768px) { /* Or your preferred mobile breakpoint */
+    .attack-display-desktop {
+        display: none; /* Hide grid on mobile */
+    }
+    .attack-display-mobile {
+        display: block; /* Show list on mobile */
+    }
+    /* Adjust layout if needed for mobile */
+    .manager-layout {
+        flex-direction: column;
+    }
 }
 
 </style> 

@@ -2,6 +2,7 @@ from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
+from django.contrib.auth import authenticate, login, logout # <-- Add imports
 
 from .models import User
 from .serializers import UserRegisterSerializer, UserProfileSerializer, BasicUserSerializer, UserSerializer, UserStatsSerializer, LeaderboardUserSerializer
@@ -185,3 +186,41 @@ class LeaderboardView(generics.ListAPIView):
         # Simpler approach: Get all users, rely on serializer methods for stats.
         # Frontend will handle sorting/display.
         return User.objects.all().order_by('username') # Default order, can be overridden
+
+# --- Session-based Login View ---
+class LoginView(APIView):
+    permission_classes = [permissions.AllowAny] # Allow anyone to access the login endpoint
+    serializer_class = UserSerializer # To serialize the user data on success
+
+    def post(self, request, *args, **kwargs):
+        username = request.data.get('username')
+        password = request.data.get('password')
+
+        if not username or not password:
+            return Response({'error': 'Username and password are required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Authenticate the user
+        user = authenticate(request, username=username, password=password)
+
+        if user is not None:
+            # Authentication successful, log the user in to establish session
+            login(request, user) 
+            # 'login' handles setting the sessionid cookie in the response
+
+            # Serialize and return user data (frontend expects this)
+            serializer = self.serializer_class(user, context={'request': request}) 
+            return Response(serializer.data) 
+        else:
+            # Authentication failed
+            return Response({'detail': 'Invalid credentials.'}, status=status.HTTP_401_UNAUTHORIZED)
+# --- END Login View ---
+
+# --- MODIFIED Logout View ---
+class LogoutView(APIView):
+    permission_classes = (permissions.IsAuthenticated,) # Ensure user is logged in
+
+    def post(self, request, *args, **kwargs):
+        # Use Django's logout function to clear the session
+        logout(request)
+        return Response({"detail": "Successfully logged out."}, status=status.HTTP_200_OK)
+# --- END Logout View ---

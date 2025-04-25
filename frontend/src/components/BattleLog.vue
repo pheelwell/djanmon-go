@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch, nextTick, onMounted, onBeforeUnmount } from 'vue';
+import { ref, watch, nextTick, onMounted, onBeforeUnmount, computed } from 'vue';
 
 const props = defineProps({
   logEntries: {
@@ -18,6 +18,56 @@ const props = defineProps({
 
 const battleLogContainer = ref(null);
 const userScrolledUp = ref(false); // Track if user manually scrolled up
+
+// --- NEW: State for expandable debug messages ---
+const expandedDebugIndices = ref(new Set()); // Stores indices of *non-debug* items whose debug logs are shown
+
+// Toggle visibility of debug messages associated with a non-debug entry
+function toggleDebugMessages(index) {
+    if (expandedDebugIndices.value.has(index)) {
+        expandedDebugIndices.value.delete(index);
+    } else {
+        expandedDebugIndices.value.add(index);
+    }
+    // No need to force scroll here, expansion happens in place
+}
+
+// Determine if a debug entry should be shown
+function shouldShowDebug(debugEntryIndex) {
+    let precedingNonDebugIndex = -1;
+    // Find the index of the closest *preceding* non-debug, non-separator entry
+    for (let i = debugEntryIndex - 1; i >= 0; i--) {
+        const entry = props.logEntries[i];
+        if (entry && entry.source !== 'debug' && entry.effect_type !== 'turnchange') {
+            precedingNonDebugIndex = i;
+            break;
+        }
+    }
+    return expandedDebugIndices.value.has(precedingNonDebugIndex);
+}
+
+// Check if a non-debug entry has *any* immediately following debug entries
+function hasAssociatedDebug(index) {
+    // Look ahead until the next non-debug entry or end of log
+    for (let i = index + 1; i < props.logEntries.length; i++) {
+        const nextEntry = props.logEntries[i];
+        if (!nextEntry) continue; // Should not happen
+        if (nextEntry.source === 'debug') {
+            return true; // Found a debug entry before any other type
+        }
+        if (nextEntry.effect_type !== 'turnchange') {
+             return false; // Found a different non-debug/non-separator entry first
+        }
+        // If it's a turnchange, continue looking
+    }
+    return false; // Reached end of log without finding debug
+}
+
+// Check if a specific non-debug entry is currently expanded
+function isExpanded(index) {
+    return expandedDebugIndices.value.has(index);
+}
+// --- END: Expandable debug messages ---
 
 // Function to handle user scroll
 function handleScroll() {
@@ -85,20 +135,59 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="battle-log-container" ref="battleLogContainer">
-      <ul v-if="logEntries && logEntries.length" class="turn-summary-list">
-          <template v-for="(entry, index) in logEntries" :key="`${battleId}-entry-${index}`">
-              <!-- ADDED: Turn Separator Line -->
-              <li v-if="entry.effect_type === 'turnchange'" class="log-turn-separator" aria-hidden="true"></li>
+      <TransitionGroup 
+          tag="ul" 
+          name="log-item" 
+          class="turn-summary-list"
+      >
+          <!-- Iterate directly within TransitionGroup -->
+          <template v-for="(entry, index) in logEntries" :key="`${battleId}-item-${index}`">
+              
+              <!-- 1. Turn Separator -->
+              <li v-if="entry.effect_type === 'turnchange'" 
+                  class="log-turn-separator" 
+                  aria-hidden="true" 
+                  :key="`${battleId}-separator-${index}`" 
+              >
+                <!-- Separator content (usually empty or just the line) -->
+              </li>
 
-              <!-- Existing Log Entry List Item -->
-              <li
+              <!-- 2. Debug Entry (Conditionally Rendered) -->
+              <template v-else-if="entry.source === 'debug'">
+                  <li v-if="shouldShowDebug(index)" 
+                      :class="{
+                          'log-entry-container': true,
+                          'source-debug': true,
+                          'log-system': true, /* Align center like system */
+                          'log-debug-entry': true 
+                      }"
+                      :key="`${battleId}-debug-${index}`" 
+                  >
+                      <span
+                         :class="[
+                             'log-bubble',
+                             'effect-info', /* Default style for debug */
+                         ]"
+                      >
+                          {{ entry.text }}
+                      </span>
+                  </li>
+              </template>
+
+              <!-- 3. Regular Non-Debug Entry -->
+              <li v-else 
+                  @click="hasAssociatedDebug(index) ? toggleDebugMessages(index) : null" 
                   :class="{
                       'log-entry-container': true,
                       [`source-${entry.source || 'unknown'}`]: true,
                       'log-user': entry.source === userPlayerRole,
-                      'log-opponent': entry.source !== userPlayerRole && entry.source !== 'system' && entry.source !== 'script' && entry.source !== 'debug',
-                      'log-system': entry.source === 'system' || entry.source === 'script' || entry.source === 'debug'
+                      'log-opponent': entry.source !== userPlayerRole && entry.source !== 'system' && entry.source !== 'script',
+                      'log-system': entry.source === 'system' || entry.source === 'script',
+                      'can-expand': hasAssociatedDebug(index), 
+                      'expanded': isExpanded(index) 
                   }"
+                  :key="`${battleId}-entry-${index}`" 
+                  :style="hasAssociatedDebug(index) ? { cursor: 'pointer' } : {}"
               >
                   <span
                      :class="[
@@ -109,6 +198,10 @@ onBeforeUnmount(() => {
                          entry.effect_type === 'stat_change' && entry.effect_details?.mod < 0 ? 'stat-arrow-down' : ''
                      ]"
                   >
+                      <!-- Indicator Removed -->
+                      <!-- <span v-if="hasAssociatedDebug(index)" class="debug-toggle-indicator">
+                         {{ isExpanded(index) ? '▼' : '▶' }}
+                      </span> -->
                       <span v-if="entry.effect_type === 'action' && entry.effect_details?.emoji" class="log-emoji">{{ entry.effect_details.emoji }}</span>
                       <span v-if="entry.effect_type === 'stat_change' && entry.effect_details?.mod > 0" class="stat-arrow up">▲</span>
                       <span v-if="entry.effect_type === 'stat_change' && entry.effect_details?.mod < 0" class="stat-arrow down">▼</span>
@@ -116,10 +209,9 @@ onBeforeUnmount(() => {
                   </span>
               </li>
           </template>
-      </ul>
-      <div v-else class="empty-log-message">Battle log is empty.</div>
-      <!-- Empty div to ensure scroll height is calculated correctly -->
-      <div style="height: 1px; flex-shrink: 0;"></div>
+      </TransitionGroup>
+      <div v-if="!logEntries || logEntries.length === 0" class="empty-log-message">Battle log is empty.</div>
+      <div style="height: 1px; flex-shrink: 0;"></div> <!-- Ensures scroll height calculation -->
   </div>
 </template>
 
@@ -290,6 +382,43 @@ onBeforeUnmount(() => {
     background-color: var(--color-border-hover);
     margin: 1rem 0.5rem;
     flex-basis: 100%;
+}
+
+/* --- Debug Toggle Styles --- */
+.log-entry-container.can-expand .log-bubble {
+  /* No extra padding needed now */
+  /* padding-left: 1.5rem; */
+  /* position: relative; */ /* No longer needed for indicator */
+}
+
+/* Indicator CSS Removed */
+/* .debug-toggle-indicator { ... } */
+/* .log-entry-container.expanded .debug-toggle-indicator { ... } */
+
+/* Make clickable items have a slight hover effect */
+.log-entry-container.can-expand:hover .log-bubble {
+  filter: brightness(1.1);
+}
+
+/* Debug entries themselves (already styled, but we added log-debug-entry class) */
+.log-debug-entry .log-bubble {
+   /* Minor adjustments if needed */
+   opacity: 0.8; 
+}
+
+/* --- Log Item Animation --- */
+.log-item-enter-active,
+.log-item-leave-active {
+  transition: all 0.4s ease;
+}
+.log-item-enter-from,
+.log-item-leave-to {
+  opacity: 0;
+  transform: translateY(10px);
+}
+/* Ensure moving items also transition smoothly */
+.log-item-move {
+  transition: transform 0.4s ease;
 }
 
 </style> 

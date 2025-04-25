@@ -10,8 +10,8 @@ const props = defineProps({
   },
   mode: {
     type: String,
-    default: 'display', // 'display', 'select', 'reveal', 'drag' (future)
-    validator: (value) => ['display', 'select', 'reveal'].includes(value) // Add 'drag' later
+    default: 'display', // 'display', 'select', 'reveal', 'drag'
+    validator: (value) => ['display', 'select', 'reveal', 'drag'].includes(value) // <-- Add 'drag'
   },
   // Props for 'select' mode
   selectedIds: { // Use v-model:selectedIds in parent
@@ -147,8 +147,6 @@ function toggleSelection(attackId) {
                 v-else
                 :attack="attack" 
             />
-            <!-- Optional Selection Indicator for 'select' mode -->
-            <span v-if="isSelected(attack.id)" class="grid-item-selection-indicator">✓</span>
         </div>
     </div>
 
@@ -189,12 +187,12 @@ function toggleSelection(attackId) {
 
 .attack-grid-layout {
   display: grid;
-  /* Force 3 columns */
-  grid-template-columns: repeat(3, 1fr);
+  /* Responsive columns */
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 1rem;
   padding: 0.5rem; /* Padding around the grid */
-  /* Center the grid items horizontally */
-  justify-content: center;
+  /* Center the grid items horizontally - may not be needed with auto-fit/minmax */
+  /* justify-content: center; */ 
 }
 
 .attack-grid-item {
@@ -202,9 +200,9 @@ function toggleSelection(attackId) {
   background-color: var(--color-background);
   border: 1px solid var(--color-border-hover);
   border-radius: 8px;
-  /* NEW: Set fixed width and height */
-  width: 180px; 
-  height: 180px; /* <-- Increased height */
+  /* REMOVED fixed width */
+  /* width: 180px; */
+  height: 180px; /* <-- Increased height (Keep for now, maybe adjust later) */
   padding: 0.5rem; /* Padding inside the card wrapper */
   display: flex; 
   flex-direction: column; 
@@ -239,19 +237,6 @@ function toggleSelection(attackId) {
   background-color: var(--color-background); /* Reset background */
   transform: none;
   box-shadow: none;
-}
-
-.grid-item-selection-indicator {
-  position: absolute;
-  top: 4px;
-  right: 6px;
-  font-size: 1.1em;
-  color: var(--primary-color);
-  font-weight: bold;
-  background-color: rgba(var(--color-background-rgb), 0.7);
-  border-radius: 50%;
-  padding: 0 2px;
-  line-height: 1;
 }
 
 /* --- Reveal Mode Styles --- */
@@ -351,19 +336,6 @@ function toggleSelection(attackId) {
   background-color: var(--color-background); /* Reset background */
   transform: none;
   box-shadow: none;
-}
-
-.grid-item-selection-indicator {
-  position: absolute;
-  top: 4px;
-  right: 6px;
-  font-size: 1.1em;
-  color: var(--primary-color);
-  font-weight: bold;
-  background-color: rgba(var(--color-background-rgb), 0.7);
-  border-radius: 50%;
-  padding: 0 2px;
-  line-height: 1;
 }
 
 </style> 

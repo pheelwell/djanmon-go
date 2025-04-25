@@ -9,6 +9,8 @@ export const useGameStore = defineStore('game', () => {
   const users = ref([]); // List of other users available to challenge
   const pendingBattles = ref([]); // List of battles awaiting response from logged-in user
   const activeBattle = ref(null); // Will hold full battle details if active
+  // NEW: Track outgoing challenges { opponentId: battleId }
+  const outgoingPendingChallenges = ref(JSON.parse(sessionStorage.getItem('outgoingPendingChallenges') || '{}')); 
   const isLoadingUsers = ref(false);
   const isLoadingPendingBattles = ref(false);
   const isLoadingActiveBattle = ref(false); // Added loading state
@@ -77,20 +79,44 @@ export const useGameStore = defineStore('game', () => {
   }
 
   // Initiate a battle challenge
-  async function challengeUser(opponentId) {
+  async function challengeUser(opponentId, fightAsBot = false) {
     actionError.value = null;
     actionSuccessMessage.value = null;
     try {
-      const response = await apiClient.post('/game/battles/initiate/', { opponent_id: opponentId });
-      // Maybe update UI slightly, show success message
-      actionSuccessMessage.value = `Challenge sent to user ${opponentId}!`; 
-      // No need to add to pendingBattles here, the opponent will see it.
-      console.log('Challenge response:', response.data);
-      return true;
+      // Include fight_as_bot in the request payload
+      const payload = { 
+        opponent_id: opponentId,
+        fight_as_bot: fightAsBot
+      };
+      const response = await apiClient.post('/game/battles/initiate/', payload);
+      
+      // Check response for immediate battle start (when fighting as bot)
+      if (response.data.battle && response.data.battle.status === 'active') {
+        actionSuccessMessage.value = response.data.message; // e.g., "Battle with Bot started!"
+        activeBattle.value = response.data.battle; // Set active battle immediately
+        // Clear any potential outgoing challenge entry for this opponent
+        delete outgoingPendingChallenges.value[opponentId];
+        sessionStorage.setItem('outgoingPendingChallenges', JSON.stringify(outgoingPendingChallenges.value));
+        console.log('AI Battle started:', response.data);
+        // Need to navigate user to battle view from the component that called this
+        return { battleStarted: true, battle: response.data.battle };
+      } else {
+        // Normal pending challenge - store the battle ID
+        const battleId = response.data.battle_id;
+        if (battleId) {
+             outgoingPendingChallenges.value[opponentId] = battleId;
+             sessionStorage.setItem('outgoingPendingChallenges', JSON.stringify(outgoingPendingChallenges.value)); // Persist briefly
+        } else {
+            console.warn('Pending challenge initiated but no battle_id received in response.');
+        }
+        actionSuccessMessage.value = `Challenge sent to user ${opponentId}!`; 
+        console.log('Challenge sent:', response.data);
+        return { battleStarted: false };
+      }
     } catch (error) {
       console.error('Failed to initiate battle:', error.response?.data || error.message);
       actionError.value = error.response?.data?.error || 'Failed to send challenge.';
-      return false;
+      return { error: true };
     }
   }
 
@@ -104,6 +130,16 @@ export const useGameStore = defineStore('game', () => {
       // Remove the battle from the pending list
       pendingBattles.value = pendingBattles.value.filter(b => b.id !== battleId);
       
+      // Clear any potential outgoing challenge entry if the user responded (less likely scenario)
+      const respondedBattle = response.data.battle;
+      if (respondedBattle) {
+         const opponentId = respondedBattle.player1.id === useAuthStore().currentUser?.id ? respondedBattle.player2.id : respondedBattle.player1.id;
+         if (outgoingPendingChallenges.value[opponentId] === battleId) {
+            delete outgoingPendingChallenges.value[opponentId];
+            sessionStorage.setItem('outgoingPendingChallenges', JSON.stringify(outgoingPendingChallenges.value));
+         }
+      }
+
       // If accepted, set the active battle state immediately from response
       if (responseAction === 'accept' && response.data.battle) {
          console.log('Battle accepted, setting active battle state:', response.data.battle);
@@ -143,6 +179,14 @@ export const useGameStore = defineStore('game', () => {
           if (changed) {
               // console.log(`[fetchActiveBattle Polling=${isPolling}] Updating activeBattle.value`); // REMOVE DEBUG
               activeBattle.value = response.data;
+              // If a battle became active, clear any related outgoing challenge
+              if (activeBattle.value) {
+                 const opponentId = activeBattle.value.player1.id === useAuthStore().currentUser?.id ? activeBattle.value.player2.id : activeBattle.value.player1.id;
+                 if (outgoingPendingChallenges.value[opponentId] === activeBattle.value.id) {
+                     delete outgoingPendingChallenges.value[opponentId];
+                     sessionStorage.setItem('outgoingPendingChallenges', JSON.stringify(outgoingPendingChallenges.value));
+                 }
+              }
           }
       } catch (error) {
           // --- REMOVE DEBUG LOGGING ---
@@ -153,7 +197,10 @@ export const useGameStore = defineStore('game', () => {
                // --- REMOVE DEBUG LOGGING ---
               if (activeBattle.value !== null) {
                  // console.log(`[fetchActiveBattle Polling=${isPolling}] Clearing activeBattle.value due to 404`); // REMOVE DEBUG
-              activeBattle.value = null;
+                  // Battle not active, check if we had an outgoing challenge for the player
+                  // who was in the now-inactive battle (if activeBattle.value had data)
+                  // THIS LOGIC IS GETTING COMPLEX - maybe rely on explicit cancel for now.
+                 activeBattle.value = null;
               }
                // --- END REMOVE DEBUG ---
           } else {
@@ -316,6 +363,29 @@ export const useGameStore = defineStore('game', () => {
     }
   }
 
+  // --- NEW: Cancel outgoing challenge --- 
+  async function cancelChallenge(battleId) {
+    actionError.value = null;
+    actionSuccessMessage.value = null;
+    try {
+      await apiClient.post(`/game/battles/${battleId}/cancel/`);
+      actionSuccessMessage.value = 'Challenge cancelled.';
+      // Remove from local tracking
+      const opponentId = Object.keys(outgoingPendingChallenges.value).find(
+          key => outgoingPendingChallenges.value[key] === battleId
+      );
+      if (opponentId) {
+          delete outgoingPendingChallenges.value[opponentId];
+          sessionStorage.setItem('outgoingPendingChallenges', JSON.stringify(outgoingPendingChallenges.value));
+      }
+      return true;
+    } catch (error) {
+      console.error('Failed to cancel challenge:', error.response?.data || error.message);
+      actionError.value = error.response?.data?.error || 'Failed to cancel challenge.';
+      return false;
+    }
+  }
+
   return {
     // State
     users,
@@ -338,6 +408,9 @@ export const useGameStore = defineStore('game', () => {
     isLoadingLeaderboard,
     leaderboardError,
 
+    // NEW: Track outgoing challenges { opponentId: battleId }
+    outgoingPendingChallenges,
+
     // Actions
     fetchUsers,
     fetchPendingBattles,
@@ -353,5 +426,6 @@ export const useGameStore = defineStore('game', () => {
     fetchMyStats, // New action
     fetchLeaderboard, // New action
     generateAttacks, // <-- Export updated action
+    cancelChallenge, // <-- Export new action
   };
 }); 

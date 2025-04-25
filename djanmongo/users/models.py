@@ -22,19 +22,11 @@ class User(AbstractUser):
     # NEW: Track user activity
     last_seen = models.DateTimeField(default=timezone.now, help_text="Last time the user made an authenticated request.")
 
-    # --- NEW: Bot Fields ---
-    is_bot = models.BooleanField(default=False, help_text="Identifies if this user is an AI-controlled bot.")
-    DIFFICULTY_CHOICES = [
-        ('easy', 'Easy'),
-        ('medium', 'Medium'),
-        ('hard', 'Hard'),
-    ]
-    difficulty = models.CharField(
-        max_length=10,
-        choices=DIFFICULTY_CHOICES,
-        blank=True, # Allow blank for regular users
-        null=True,  # Allow null for regular users
-        help_text="Difficulty level if this user is a bot."
+    # --- Fields removed to match DB state: is_bot, difficulty ---
+    # NEW: Allow others to fight this user as a bot
+    allow_bot_challenges = models.BooleanField(
+        default=False, 
+        help_text="Allows other users to initiate a battle against this user controlled by AI."
     )
     # -----------------------
 

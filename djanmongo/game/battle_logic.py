@@ -174,10 +174,10 @@ def apply_attack(battle: Battle, attacker: User, attack: Attack):
                             "original_target_role": target_role, # Who was targeted by the attack
                         }
                         newly_registered_scripts.append(script_instance_data)
-                        add_log_entry({"source": "system", "text": f"'{attack.name}' registered script '{script.name}' ({trigger_type}) on {reg_player_name}.", "effect_type": "info"})
+                        add_log_entry({"source": "debug", "text": f"'{attack.name}' registered script '{script.name}' ({trigger_type}) on {reg_player_name}.", "effect_type": "debug"})
             else:
                  if script.trigger_on_attack: # Log if an on-attack script couldn't run
-                     add_log_entry({"source": "system", "text": f"Script ID {script.id} ({script.name}) for {attack.name} has no code or Lua is unavailable.", "effect_type": "info"})
+                     add_log_entry({"source": "debug", "text": f"Script ID {script.id} ({script.name}) for {attack.name} has no code or Lua is unavailable.", "effect_type": "debug"})
 
         # Append new scripts to the list from phase 1
         if newly_registered_scripts:
@@ -299,7 +299,15 @@ def apply_attack(battle: Battle, attacker: User, attack: Attack):
             # Enough momentum, spend it and keep turn
             new_momentum = current_momentum - actual_cost
             setattr(battle, momentum_attr, new_momentum)
-            add_log_entry({"source": "system", "text": f"{attacker.username} has {new_momentum} momentum remaining.", "effect_type": "debug"})
+            add_log_entry({
+                "source": "debug",
+                "text": f"{attacker.username} has {new_momentum} momentum remaining.", 
+                "effect_type": "momentum",
+                "effect_details": {
+                    "target_role": attacker_role,
+                    "new_momentum": new_momentum
+                }
+                })
             # DO NOT increment turn number here
         else:
             # Not enough momentum, spend all, give overflow to opponent, switch turn
@@ -309,10 +317,22 @@ def apply_attack(battle: Battle, attacker: User, attack: Attack):
             new_opponent_momentum = opponent_momentum + overflow_cost
             setattr(battle, opponent_momentum_attr, new_opponent_momentum)
             
+            # --- ADD MOMENTUM SWING LOG --- 
+            add_log_entry({
+                "source": "debug", 
+                "text": f"Momentum swings to {target_player.username}!", 
+                "effect_type": "momentum", 
+                "effect_details": { # Optional details for potential frontend use
+                    "target_role": target_role,
+                    "new_momentum": new_opponent_momentum
+                }
+            })
+            # --- END MOMENTUM SWING LOG --- 
+            
             battle.whose_turn = target_role # Switch turn
             battle.turn_number += 1 # Increment turn number ONLY when turn passes
             
-            add_log_entry({"source": "system", "text": f"{attacker.username} uses remaining {current_momentum} momentum. {overflow_cost} overflow given to {target_player.username} ({new_opponent_momentum} total).", "effect_type": "debug"})
+            add_log_entry({"source": "debug", "text": f"{attacker.username} uses remaining {current_momentum} momentum. {overflow_cost} overflow given to {target_player.username} ({new_opponent_momentum} total).", "effect_type": "debug"})
             add_log_entry({"source": "system", "text": f"Turn {battle.turn_number}: It is now {target_player.username}'s turn!", "effect_type": "turnchange"})
             
         state_changed_this_turn = True # Momentum change always counts
@@ -344,6 +364,22 @@ def apply_attack(battle: Battle, attacker: User, attack: Attack):
             add_log_entry({"source": "system", "text": f"{battle.winner.username} earned {winner_credits_earned} Booster Credits!", "effect_type": "info"})
             add_log_entry({"source": "system", "text": f"{loser.username} earned {loser_credits_earned} Booster Credit!", "effect_type": "info"})
         # --- End Award Credits ---
+
+        # --- BEGIN DEBUG LOGGING --- 
+        print(f"    DEBUG: Before save - Battle ID: {{battle.id}}")
+        print(f"    DEBUG: Type of stat_stages_player1: {{type(battle.stat_stages_player1)}}")
+        print(f"    DEBUG: Type of stat_stages_player2: {{type(battle.stat_stages_player2)}}")
+        print(f"    DEBUG: Type of custom_statuses_player1: {{type(battle.custom_statuses_player1)}}")
+        print(f"    DEBUG: Type of custom_statuses_player2: {{type(battle.custom_statuses_player2)}}")
+        print(f"    DEBUG: Type of registered_scripts: {{type(battle.registered_scripts)}}")
+        if isinstance(battle.registered_scripts, list) and battle.registered_scripts:
+            print(f"    DEBUG: Type of first item in registered_scripts: {{type(battle.registered_scripts[0])}}")
+        print(f"    DEBUG: Type of last_turn_summary: {{type(battle.last_turn_summary)}}")
+        if isinstance(battle.last_turn_summary, list) and battle.last_turn_summary:
+            print(f"    DEBUG: Type of first item in last_turn_summary: {{type(battle.last_turn_summary[0])}}")
+            if isinstance(battle.last_turn_summary[0], dict) and 'effect_details' in battle.last_turn_summary[0]:
+                 print(f"    DEBUG: Type of first item's effect_details: {{type(battle.last_turn_summary[0]['effect_details'])}}")
+        # --- END DEBUG LOGGING --- 
 
         try:
             battle.save()

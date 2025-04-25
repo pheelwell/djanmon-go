@@ -2,13 +2,29 @@ from django.contrib import admin
 from django import forms
 from django.utils.html import format_html
 import json # Added for formatting
-from .models import Attack, Battle, Script
+from .models import Attack, Battle, Script, GameConfiguration
 from django.db.models import Count, Case, When, Value, IntegerField # Added for annotation
 from unfold.admin import ModelAdmin
 from django.contrib.admin import SimpleListFilter # Added for custom filter
 # Import the correct widget based on the user-provided library
 from djangoeditorwidgets.widgets import MonacoEditorWidget 
 from django.utils.safestring import mark_safe
+
+# --- Game Configuration Admin ---
+@admin.register(GameConfiguration)
+class GameConfigurationAdmin(ModelAdmin):
+    list_display = ('id', 'attack_generation_cost')
+    # No actions needed, only one instance
+    actions = None 
+
+    def has_add_permission(self, request):
+        # Prevent adding more instances if one already exists
+        return not GameConfiguration.objects.exists()
+        
+    def has_delete_permission(self, request, obj=None):
+        # Optionally prevent deletion
+        return False # Prevent deletion of the singleton config
+# --- END Game Configuration Admin ---
 
 # --- Inline Admin for Scripts ---
 class ScriptInlineForm(forms.ModelForm): # Form specifically for the inline

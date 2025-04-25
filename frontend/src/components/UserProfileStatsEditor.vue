@@ -197,9 +197,6 @@ const saveButtonText = computed(() => {
 <template>
   <div class="stats-editor">
     <!-- Removed Title and Instructions -->
-    <!-- <h3>Edit Base Stats</h3> -->
-    <!-- <p class="instructions"> ... </p> -->
-
     <!-- Draggable Bars -->
     <div class="stat-bars-editable">
         <!-- HP Bar -->
@@ -289,10 +286,6 @@ const saveButtonText = computed(() => {
 
 <style scoped>
 .stats-editor {
-  /* padding: 1.5rem; */ /* REMOVED padding */
-  /* background-color: var(--color-background-soft); */ /* REMOVED background */
-  /* border-radius: 8px; */ /* REMOVED border-radius */
-  /* border: 1px solid var(--color-border); */ /* REMOVED border from component root */
   display: flex;
   flex-direction: column;
   gap: 1rem;
