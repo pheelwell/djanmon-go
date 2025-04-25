@@ -42,30 +42,34 @@ const apiClient = axios.create({
 //   }
 // );
 
-// --- ADD CSRF Token Interceptor ---
-// Function to get CSRF cookie
-function getCookie(name) {
-  let cookieValue = null;
-  if (document.cookie && document.cookie !== '') {
-    const cookies = document.cookie.split(';');
-    for (let i = 0; i < cookies.length; i++) {
-      const cookie = cookies[i].trim();
-      // Does this cookie string begin with the name we want?
-      if (cookie.substring(0, name.length + 1) === (name + '=')) {
-        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
-        break;
-      }
+// --- CSRF Token Handling --- 
+let csrfToken = null; // Variable to store the fetched token
+
+// Function to fetch CSRF token (Call this early in your app)
+export async function fetchCsrfToken() {
+    try {
+        console.log('Fetching CSRF token...');
+        // Use the apiClient instance itself, credentials will be sent
+        const response = await apiClient.get('/users/csrf-token/'); 
+        csrfToken = response.data.csrfToken;
+        console.log('CSRF token fetched successfully.');
+    } catch (error) {
+        console.error('Failed to fetch CSRF token:', error.response?.data || error.message);
+        csrfToken = null; // Reset on failure
     }
-  }
-  return cookieValue;
 }
 
+// --- Axios Interceptor --- 
 apiClient.interceptors.request.use(config => {
-  // Add CSRF token header for non-safe methods
+  // Add CSRF token header for non-safe methods using the fetched token
   if (!['GET', 'HEAD', 'OPTIONS', 'TRACE'].includes(config.method.toUpperCase())) {
-    const csrfToken = getCookie('csrftoken'); // Django's default CSRF cookie name
     if (csrfToken) {
       config.headers['X-CSRFToken'] = csrfToken;
+      console.log('Attached X-CSRFToken header from fetched token.');
+    } else {
+        console.warn('CSRF token not available for non-safe request.');
+        // Optionally: You could try to fetch the token here again before proceeding,
+        // or queue the request, but simply warning might be sufficient initially.
     }
   }
   return config;

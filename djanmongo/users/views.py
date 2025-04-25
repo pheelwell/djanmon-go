@@ -3,6 +3,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from django.contrib.auth import authenticate, login, logout # <-- Add imports
+from django.middleware.csrf import get_token # <-- Add import
 
 from .models import User
 from .serializers import UserRegisterSerializer, UserProfileSerializer, BasicUserSerializer, UserSerializer, UserStatsSerializer, LeaderboardUserSerializer
@@ -186,6 +187,17 @@ class LeaderboardView(generics.ListAPIView):
         # Simpler approach: Get all users, rely on serializer methods for stats.
         # Frontend will handle sorting/display.
         return User.objects.all().order_by('username') # Default order, can be overridden
+
+# --- NEW: CSRF Token View ---
+class CsrfTokenView(APIView):
+    permission_classes = [permissions.AllowAny] # Anyone can get the token
+
+    def get(self, request, *args, **kwargs):
+        # Ensure a CSRF cookie is set for the session if it doesn't exist
+        # get_token() also handles setting the cookie if needed.
+        csrf_token = get_token(request)
+        return Response({'csrfToken': csrf_token})
+# --- END CSRF Token View ---
 
 # --- Session-based Login View ---
 class LoginView(APIView):

@@ -149,7 +149,7 @@ CORS_ALLOW_CREDENTIALS = True
 CSRF_TRUSTED_ORIGINS = [
     'http://localhost:5173', # Add your frontend development origin
     'http://127.0.0.1:5173',
-    'https://djanmon-go-1.onrender.com' # Placeholder - REPLACE THIS
+    'https://djanmon-go-1.onrender.com'
 ]
 
 # --- Cookie Settings for Cross-Site Production ---
