@@ -196,7 +196,6 @@ const saveButtonText = computed(() => {
 
 <template>
   <div class="stats-editor">
-    <!-- Removed Title and Instructions -->
     <!-- Draggable Bars -->
     <div class="stat-bars-editable">
         <!-- HP Bar -->
@@ -253,223 +252,148 @@ const saveButtonText = computed(() => {
         </div>
     </div>
 
-    <!-- Removed Summary Text -->
-    <!-- <div class="summary"> ... </div> -->
-
-    <div class="actions">
-        <!-- Button is only visible if statsChanged is true -->
-        <button 
-            v-if="statsChanged"
-            @click="handleSave"
-            :disabled="!isValid || isSaving" 
-            class="button button-primary save-button"
-            :class="{ 'is-invalid': !isValid, 'is-valid': isValid }" 
-        >
-            <!-- Use store's isSaving -->
-            <span v-if="isSaving">Saving...</span>
-            <span v-else-if="isValid">Save Stats</span>
-            <span v-else>{{ TARGET_SUM - currentSum }} points</span>
-        </button>
-        
-        <!-- Show reset only if changes were made -->
-        <button v-if="statsChanged" @click="handleReset" :disabled="isSaving" class="button button-secondary icon-button" title="Reset Stats">
-            🔄 
-        </button>
+    <!-- Controls -->
+    <div class="controls">
+        <div class="status">
+            <span v-if="saveError" class="error">Error: {{ saveError }}</span>
+             <span v-else-if="isValid" class="valid">Total: {{ currentSum }}/{{ TARGET_SUM }}</span>
+             <span v-else class="invalid">Total: {{ currentSum }}/{{ TARGET_SUM }}</span>
+        </div>
+        <div class="buttons">
+            <button @click="handleReset" :disabled="!statsChanged || isSaving" class="btn btn-secondary">Reset</button>
+            <button @click="handleSave" :disabled="!isValid || !statsChanged || isSaving" class="btn btn-primary">{{ saveButtonText }}</button>
+        </div>
     </div>
-
-    <!-- Use store's saveError -->
-    <div v-if="saveError" class="error-message">Error: {{ saveError.detail || saveError }}</div>
-    <!-- Removed saveSuccess message display -->
-
   </div>
 </template>
 
 <style scoped>
 .stats-editor {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-.instructions {
-  font-size: 0.9em;
-  color: var(--color-text-muted);
-  margin-bottom: 0.5rem;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: var(--border-width) dashed var(--color-border);
+  font-family: var(--font-primary);
 }
 
 .stat-bars-editable {
     display: flex;
     flex-direction: column;
-    gap: 1rem;
-    margin-top: 1rem;
-    user-select: none; /* Prevent text selection during drag */
+    gap: 12px; /* Adjust gap */
+    margin-bottom: 20px;
 }
 
 .stat-bar-group {
     display: flex;
     align-items: center;
-    gap: 1rem;
+    gap: 10px;
 }
 
 .stat-bar-group label {
-    font-weight: bold;
-    width: 80px; /* Fixed width */
-    text-align: right;
+    flex-basis: 100px; /* Fixed width for labels */
     flex-shrink: 0;
-    white-space: nowrap; /* ADDED: Prevent line break */
+    text-align: right;
+    font-size: 0.9em;
+    color: var(--color-text);
+    text-transform: uppercase;
 }
 
 .bar-track {
     flex-grow: 1;
-    height: 20px; /* Make bars taller */
-    background-color: var(--color-background-mute);
-    border-radius: 10px;
+    height: 20px; /* Bar height */
+    background-color: var(--color-bg); /* Dark track */
     border: 1px solid var(--color-border);
+    border-radius: 0; /* No rounded corners */
     position: relative;
-    cursor: grab;
-}
-
-.bar-track:active {
-    cursor: grabbing;
+    cursor: grab; /* Indicate draggable */
+    overflow: hidden; /* Hide overflow for fill */
+    box-shadow: inset 1px 1px 0px rgba(0,0,0,0.5); /* Inner shadow */
 }
 
 .bar-fill {
     position: absolute;
     left: 0;
     top: 0;
-    height: 100%;
-    border-radius: 10px;
-    background-color: var(--color-primary); /* Default fill */
-    display: flex; /* To position handle */
-    align-items: center; /* Center handle vertically */
-    justify-content: flex-end; /* Position handle at the end */
+    bottom: 0;
+    background-color: var(--color-text); /* Default fill color */
+    border-radius: 0;
+    pointer-events: none; /* Prevent fill from stealing clicks */
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.1); /* Inner highlight */
 }
 
-.bar-fill.hp { background-color: var(--vt-c-green); }
-.bar-fill.attack { background-color: var(--vt-c-red); }
-.bar-fill.defense { background-color: var(--vt-c-blue); }
-.bar-fill.speed { background-color: var(--vt-c-yellow); }
+/* --- Stat Specific Colors --- */
+.bar-fill.hp { background-color: var(--color-hp-high); }
+.bar-fill.attack { background-color: var(--color-accent); } /* Red */
+.bar-fill.defense { background-color: var(--color-momentum-user); } /* Blue */
+.bar-fill.speed { background-color: var(--color-hp-medium); } /* Yellow */
 
 .handle {
-    width: 10px; /* Width of the handle */
-    height: 120%; /* Make handle slightly taller than bar */
-    background-color: rgba(255, 255, 255, 0.8);
-    border: 1px solid rgba(0, 0, 0, 0.3);
-    border-radius: 3px;
-    cursor: ew-resize; /* East-west resize cursor */
-    position: relative; /* Allows fine-tuning if needed */
-    right: -5px; /* Center the handle visually over the end */
-    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+    position: absolute;
+    right: -6px; /* Position handle slightly outside */
+    top: 50%;
+    transform: translateY(-50%);
+    width: 10px; /* Handle width */
+    height: 24px; /* Handle height */
+    background-color: var(--color-text); /* Handle color */
+    border: 1px solid var(--color-border);
+    border-radius: 0; /* No rounded corners */
+    cursor: grab;
+    z-index: 2;
+    box-shadow: 1px 1px 0px var(--color-border); /* Pixel shadow */
+    pointer-events: auto; /* Allow handle to be grabbed */
 }
 
-.summary {
-  margin-top: 0.5rem;
-  font-weight: bold;
+.handle:active {
+    cursor: grabbing;
+    background-color: var(--color-accent-secondary);
 }
 
-.summary .valid {
-    color: var(--color-success);
-}
-.summary .invalid {
-    color: var(--color-danger);
-}
-.validation-error {
-    font-size: 0.85em;
-    font-weight: normal;
-    color: var(--color-danger);
-    margin-left: 10px;
-}
-
-.actions {
-    margin-top: 1rem;
+.controls {
     display: flex;
-    gap: 1rem;
-    justify-content: flex-end; /* Align buttons to the right */
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 15px;
+    padding-top: 15px;
+    border-top: var(--border-width) dashed var(--color-border);
 }
 
-.error-message {
-    color: var(--color-danger);
-    margin-top: 0.5rem;
+.status span {
+    font-size: 0.9em;
+    font-weight: normal;
 }
 
-/* Import button styles if not global */
-.button {
-  /* Basic button styles */
-  padding: 0.6rem 1.2rem;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  font-weight: bold;
-  transition: background-color 0.2s ease, opacity 0.2s ease;
+.status .valid {
+    color: var(--color-hp-high);
+}
+.status .invalid {
+    color: var(--color-accent);
+}
+.status .error {
+    color: var(--color-accent);
+    font-weight: bold;
 }
 
-.button:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
+.buttons {
+    display: flex;
+    gap: 10px;
 }
 
-.button-primary {
-  background-color: var(--color-primary);
-  color: white;
-}
-.button-primary:hover:not(:disabled) {
-  background-color: var(--color-primary-dark);
+/* Apply base btn styles, assume they exist globally */
+.btn {
+    /* Assuming base styles are in main.css or similar */
 }
 
-/* ADDED: Explicit gray background for disabled primary button */
-.button-primary:disabled {
-    background-color: #555; /* Example gray color */
-    opacity: 0.7; /* Adjust opacity if needed */
+.btn-secondary {
+     background-color: var(--color-log-system);
+     color: var(--color-bg);
+     border-color: var(--color-border);
+}
+.btn-secondary:hover:not(:disabled) {
+    background-color: var(--color-text);
+    color: var(--color-bg);
 }
 
-.button-secondary {
-  background-color: var(--color-secondary);
-  color: var(--color-text);
-  border: 1px solid var(--color-border-hover);
-}
-.button-secondary:hover:not(:disabled) {
-  background-color: var(--color-background-mute);
+.btn-primary {
+    /* Base theme button uses accent-secondary, which is fine */
 }
 
-/* Style for icon button */
-.icon-button {
-    padding: 0.5rem; /* Adjust padding for icon */
-    line-height: 1; /* Ensure icon is centered vertically */
-    min-width: auto;
-    font-size: 1.2em; /* Make icon slightly larger */
-}
-
-/* Make save button potentially wider to accommodate text */
-.save-button {
-    min-width: 120px; 
-    text-align: center;
-    /* Add transition for border color/shadow */
-    transition: background-color 0.2s ease, opacity 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
-}
-
-/* Styles for validation state */
-.save-button.is-valid {
-    background-color: var(--color-success); /* Green background */
-    border: 1px solid var(--color-success-dark);
-    box-shadow: 0 0 5px rgba(var(--vt-c-green-rgb), 0.4); 
-}
-.save-button.is-valid:hover:not(:disabled) {
-    background-color: var(--color-success-dark);
-}
-
-.save-button.is-invalid {
-    border: 2px solid var(--color-danger) !important; /* Ensure red outline appears */
-    background-color: var(--color-background-soft); /* Keep background subtle */
-    color: var(--color-text-muted); 
-    box-shadow: 0 0 5px rgba(var(--vt-c-red-rgb), 0.4); 
-    opacity: 0.7; /* Make it look more disabled */
-    cursor: not-allowed;
-}
-
-/* Ensure disabled overrides invalid hover state if needed */
-.save-button.is-invalid:hover {
-     /* Keep the invalid appearance on hover */
-     background-color: var(--color-background-soft);
-     color: var(--color-text-muted);
-}
 </style> 

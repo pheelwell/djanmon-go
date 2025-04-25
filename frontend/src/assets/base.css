@@ -1,78 +1,51 @@
 /* color palette from <https://github.com/vuejs/theme> */
 :root {
-  --vt-c-white: #ffffff;
-  --vt-c-white-soft: #f8f8f8;
-  --vt-c-white-mute: #f2f2f2;
+  /* -- From Provided Retro CSS -- */
+  --font-primary: 'Press Start 2P', cursive;
+  --color-bg: #1a1a2e; /* Dark blue/purple */
+  --color-panel-bg: #16213e; /* Slightly lighter blue */
+  --color-border: #0f3460; /* Darker blue for borders */
+  --color-text: #e0e0e0; /* Off-white */
+  --color-accent: #e94560; /* Vibrant pink/red */
+  --color-accent-secondary: #53bdeb; /* Neon Blue */
+  --color-hp-high: #35D068; /* Green */
+  --color-hp-medium: #F5D547; /* Yellow */
+  --color-hp-low: #E94560; /* Red */
+  --color-stat-up: #53bdeb; /* Blue for up */
+  --color-stat-down: #e94560; /* Red for down */
+  --color-momentum-user: #53bdeb;
+  --color-momentum-opponent: #e94560; /* If you had opponent momentum */
+  --color-log-user: #a2d2ff;
+  --color-log-opponent: #ffb3c1;
+  --color-log-system: #bdbdbd;
 
-  --vt-c-black: #181818;
-  --vt-c-black-soft: #222222;
-  --vt-c-black-mute: #282828;
+  --border-width: 3px;
+  --panel-padding: 15px;
+  --element-gap: 10px;
 
-  --vt-c-indigo: #2c3e50;
+  /* -- Map to existing generic names (adjust as needed) -- */
+  --color-background: var(--color-bg);
+  --color-background-soft: var(--color-panel-bg);
+  --color-background-mute: var(--color-border); 
 
-  --vt-c-divider-light-1: rgba(60, 60, 60, 0.29);
-  --vt-c-divider-light-2: rgba(60, 60, 60, 0.12);
-  --vt-c-divider-dark-1: rgba(84, 84, 84, 0.65);
-  --vt-c-divider-dark-2: rgba(84, 84, 84, 0.48);
+  --color-border-hover: var(--color-accent-secondary); /* Use accent for hover border */
 
-  --vt-c-text-light-1: var(--vt-c-indigo);
-  --vt-c-text-light-2: rgba(60, 60, 60, 0.66);
-  --vt-c-text-dark-1: var(--vt-c-white);
-  --vt-c-text-dark-2: rgba(235, 235, 235, 0.64);
+  --color-heading: var(--color-accent-secondary); /* Use secondary accent for headings */
+  /* Text color already defined */
 
-  /* Badge Colors */
-  --vt-c-red: #e74c3c;
-  --vt-c-blue: #3498db;
-  --vt-c-yellow-darker: #f39c12; /* A darker yellow/orange */
-  /* Add other colors like green if needed */
-  --vt-c-green: #2ecc71;
-  --vt-c-green-dark: #27ae60;
-  --vt-c-green-soft: rgba(46, 204, 113, 0.18);
-  --vt-c-yellow: #f1c40f; /* Lighter yellow if needed */
-  --vt-c-red-dark: #c0392b;
-  --vt-c-red-soft: rgba(231, 76, 60, 0.18);
-  --vt-c-blue-soft: rgba(52, 152, 219, 0.18);
+  /* -- Remove old theme variables -- */
+  /* --vt-c-white: #ffffff; ... etc ... */
 }
 
-/* semantic color variables for this project */
-:root {
-  --color-background: var(--vt-c-white);
-  --color-background-soft: var(--vt-c-white-soft);
-  --color-background-mute: var(--vt-c-white-mute);
-
-  --color-border: var(--vt-c-divider-light-2);
-  --color-border-hover: var(--vt-c-divider-light-1);
-
-  --color-heading: var(--vt-c-text-light-1);
-  --color-text: var(--vt-c-text-light-1);
-
-  --section-gap: 160px;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --color-background: var(--vt-c-black);
-    --color-background-soft: var(--vt-c-black-soft);
-    --color-background-mute: var(--vt-c-black-mute);
-
-    --color-border: var(--vt-c-divider-dark-2);
-    --color-border-hover: var(--vt-c-divider-dark-1);
-
-    --color-heading: var(--vt-c-text-dark-1);
-    --color-text: var(--vt-c-text-dark-2);
-
-    /* Optional: Define darker badge variants if needed */
-    /* --vt-c-red: #c0392b; */
-    /* --vt-c-blue: #2980b9; */
-    /* --vt-c-yellow-darker: #d35400; */
-  }
-}
+/* Remove the prefers-color-scheme block as we are defining a single theme */
+/* @media (prefers-color-scheme: dark) { ... } */
 
 *,
 *::before,
 *::after {
   box-sizing: border-box;
   margin: 0;
+  padding: 0; /* Added padding reset */
   font-weight: normal;
 }
 
@@ -80,25 +53,14 @@ body {
   min-height: 100vh;
   color: var(--color-text);
   background: var(--color-background);
-  transition:
-    color 0.5s,
-    background-color 0.5s;
+  /* Remove color transition */
   line-height: 1.6;
-  font-family:
-    Inter,
-    -apple-system,
-    BlinkMacSystemFont,
-    'Segoe UI',
-    Roboto,
-    Oxygen,
-    Ubuntu,
-    Cantarell,
-    'Fira Sans',
-    'Droid Sans',
-    'Helvetica Neue',
-    sans-serif;
-  font-size: 15px;
+  font-family: var(--font-primary);
+  font-size: 10px; /* Base size for pixel font */
   text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  -webkit-font-smoothing: antialiased; /* Keep this */
+  -moz-osx-font-smoothing: grayscale; /* Keep this */
+  image-rendering: pixelated; /* Crucial for pixel art fonts/images */
+  font-smooth: never; /* Disable anti-aliasing for fonts */
+  -webkit-font-smoothing: none; /* For Webkit */
 }

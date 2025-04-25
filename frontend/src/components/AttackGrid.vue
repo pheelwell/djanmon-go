@@ -51,7 +51,8 @@ const props = defineProps({
 const emit = defineEmits([
   'update:selectedIds', // For v-model support
   'reveal',
-  'update:draggableModel' // For v-model support with drag
+  'update:draggableModel', // For v-model support with drag
+  'attackClick' // <-- Add attackClick here
 ]);
 
 // --- Computed properties for styling/disabling --- 
@@ -89,26 +90,29 @@ const computedDragOptions = computed(() => ({
 
 // --- Event Handlers --- 
 
-function handleClick(attack) {
+// Combined click handler
+function handleItemClick(attack) {
+  // Always emit the generic attackClick event for the parent
+  emit('attackClick', attack);
+
+  // Handle mode-specific logic internally if needed
   if (props.mode === 'select') {
     toggleSelection(attack.id);
   } else if (props.mode === 'reveal') {
     if (!isRevealed(attack.id)) {
-        emit('reveal', attack.id);
+      emit('reveal', attack.id);
     }
   }
-  // Add other mode handlers later (e.g., drag start)
 }
 
+// Keep toggleSelection for select mode logic
 function toggleSelection(attackId) {
   const currentSelected = [...props.selectedIds];
   const index = currentSelected.indexOf(attackId);
 
   if (index > -1) {
-    // Deselect
     currentSelected.splice(index, 1);
   } else {
-    // Select if not exceeding max
     if (currentSelected.length < props.maxSelectable) {
       currentSelected.push(attackId);
     }
@@ -123,8 +127,9 @@ function toggleSelection(attackId) {
 
 <template>
   <div class="attack-grid-component" :class="[`mode-${mode}`]">
-    <!-- Basic Grid for Display/Select/Reveal -->
-    <div v-if="mode === 'display' || mode === 'select' || mode === 'reveal'" class="attack-grid-layout">
+    <!-- Basic Grid for Display/Select/Reveal/Action -->
+    <!-- Combine conditions as the structure is the same -->
+    <div v-if="mode === 'display' || mode === 'select' || mode === 'reveal' || mode === 'action'" class="attack-grid-layout">
         <div 
             v-for="attack in attacks" 
             :key="attack.id" 
@@ -132,21 +137,22 @@ function toggleSelection(attackId) {
             :class="{
                 'is-selectable': mode === 'select',
                 'is-revealable': mode === 'reveal',
+                'is-actionable': mode === 'action', // Add class for action mode styling
                 'selected': isSelected(attack.id),
-                'disabled': isSelectionDisabled(attack.id),
+                'disabled': isSelectionDisabled(attack.id), // Primarily for select mode
                 'revealed': isRevealed(attack.id)
             }"
-            @click="handleClick(attack)"
+            @click="handleItemClick(attack)"  
         >
              <!-- Reveal Mode: Face-down Card -->
             <div v-if="mode === 'reveal' && !isRevealed(attack.id)" class="attack-card-face-down">
                  <span class="reveal-prompt">Click to Reveal</span>
             </div>
             <!-- Default: Attack Card Display -->
-            <AttackCardDisplay 
+            <AttackCardDisplay
                 v-else
-                :attack="attack" 
-            />
+                :attack="attack"
+            ></AttackCardDisplay>
         </div>
     </div>
 
@@ -168,7 +174,7 @@ function toggleSelection(attackId) {
         </template>
         <template #item="{element}">
              <div class="attack-grid-item is-draggable">
-                <AttackCardDisplay :attack="element"/>
+                <AttackCardDisplay :attack="element"></AttackCardDisplay>
             </div>
         </template>
     </draggable>
@@ -182,117 +188,120 @@ function toggleSelection(attackId) {
 
 <style scoped>
 .attack-grid-component {
-  /* Basic container styling */
+  /* No specific styles needed on the component wrapper */
 }
 
 .attack-grid-layout {
   display: grid;
-  /* Responsive columns */
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  gap: 1rem;
-  padding: 0.5rem; /* Padding around the grid */
-  /* Center the grid items horizontally - may not be needed with auto-fit/minmax */
-  /* justify-content: center; */ 
+  /* Responsive columns with fixed pixel base for retro look */
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); /* Keep smaller min size */
+  gap: var(--element-gap); /* Use theme gap */
+  padding: 5px; /* Inner padding for the grid container */
+  /* Remove background/border from here, apply to component or parent panel */
 }
 
 .attack-grid-item {
-  position: relative; /* For indicators */
-  background-color: var(--color-background);
-  border: 1px solid var(--color-border-hover);
-  border-radius: 8px;
-  /* REMOVED fixed width */
-  /* width: 180px; */
-  height: 180px; /* <-- Increased height (Keep for now, maybe adjust later) */
-  padding: 0.5rem; /* Padding inside the card wrapper */
-  display: flex; 
-  flex-direction: column; 
-  justify-content: center; 
-  align-items: center; 
-  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
-  overflow: hidden; 
+  /* Container for each AttackCardDisplay */
+  /* Remove background/border, let AttackCardDisplay handle its own */
+  background-color: transparent;
+  border: none;
+  padding: 0; /* No padding on the item itself */
+  display: flex; /* Use flex for alignment */
+  justify-content: center;
+  align-items: center;
+  transition: transform 0.1s ease;
+  min-height: 150px; /* Give items a minimum height */
+  /* Remove fixed height: height: 180px; */
+  /* Remove overflow: hidden; let card handle it */
 }
 
 /* --- Interaction Styles --- */
 
-.attack-grid-item.is-selectable,
-.attack-grid-item.is-revealable {
-  cursor: pointer;
+/* General hover effect for any clickable item (unless disabled) */
+.attack-grid-item:hover:not(.disabled) {
+    cursor: pointer;
+    transform: scale(1.03); /* Keep slight scale effect */
 }
 
-.attack-grid-item.is-selectable:hover:not(.disabled) {
-  transform: translateY(-3px);
-  box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-  border-color: var(--vt-c-indigo); 
+/* Apply visual changes to the inner card on hover */
+.attack-grid-item:hover:not(.disabled) > .attack-card-content {
+    border-color: var(--color-accent-secondary); /* Highlight border */
+    box-shadow: 2px 2px 0px var(--color-accent-secondary); /* Highlight shadow */
 }
 
-.attack-grid-item.selected {
-  border-color: var(--primary-color); 
-  background-color: rgba(var(--primary-color-rgb), 0.1); 
+.attack-grid-item.selected > .attack-card-content {
+  /* Use primary accent for selected border */
+  border-color: var(--color-accent); 
+  box-shadow: 2px 2px 0px var(--color-accent); 
 }
 
 .attack-grid-item.disabled {
-  opacity: 0.5; 
+  opacity: 0.6;
   cursor: not-allowed;
-  border-color: var(--color-border-hover); /* Reset border */
-  background-color: var(--color-background); /* Reset background */
+}
+.attack-grid-item.disabled > .attack-card-content {
+  border-color: var(--color-border);
+  box-shadow: 1px 1px 0px var(--color-border); 
   transform: none;
-  box-shadow: none;
 }
 
 /* --- Reveal Mode Styles --- */
 .attack-card-face-down {
   width: 100%;
   height: 100%;
-  background-color: var(--color-background-mute);
-  border: 2px dashed var(--color-border-hover);
+  min-height: 150px; /* Match item min-height */
+  background-color: var(--color-bg); /* Dark background */
+  border: 2px dashed var(--color-border);
   display: flex;
   justify-content: center;
   align-items: center;
-  color: var(--color-text-muted);
+  color: var(--color-text);
   font-size: 0.9em;
-  font-style: italic;
-  border-radius: 6px; 
+  font-family: var(--font-primary);
+  border-radius: 0;
   box-sizing: border-box; 
   transition: background-color 0.2s;
+  text-transform: uppercase;
 }
 
 .attack-card-face-down:hover {
-  background-color: var(--color-background-soft);
+  background-color: var(--color-panel-bg);
+  border-color: var(--color-accent-secondary);
+  color: var(--color-accent-secondary);
+}
+
+.reveal-prompt { /* Class added in template */
+    /* Specific styles for the text if needed */
 }
 
 .empty-grid-message {
-  padding: 2rem 1rem;
+  padding: 20px 10px;
   text-align: center;
-  color: var(--color-text-mute);
+  color: var(--color-log-system); /* Match log empty */
   font-style: italic;
   border: 1px dashed var(--color-border);
-  border-radius: 6px;
-  margin-top: 0.5rem;
+  border-radius: 0;
+  margin-top: 5px;
+  font-family: var(--font-primary);
+  text-transform: uppercase;
+  font-size: 1em;
 }
 
-/* Ensure draggable grid also gets layout styles */
+/* Draggable Specific Styles */
 .attack-grid-layout.draggable-grid {
-  min-height: 150px; /* Ensure dropzone has min height */
-  /* Add other specific styles for the draggable area if needed */
-  background-color: var(--color-background-mute); /* Example background */
-  border: 1px solid var(--color-border); /* Example border */
-  border-radius: 8px;
-  /* NEW: Add transition for background change */
+  min-height: 150px; 
+  background-color: rgba(0,0,0,0.1); /* Faint bg for dropzone */
+  border: 1px dashed var(--color-border);
+  border-radius: 0;
   transition: background-color 0.2s ease;
 }
 
-/* NEW: Style when draggable grid is empty */
 .attack-grid-layout.draggable-grid:has(.empty-grid-message) {
-  background-color: var(--color-background-soft); /* Slightly different bg when empty */
-  border-style: dashed; /* Dashed border when empty */
+  background-color: transparent; /* No background when empty */
+  border-style: dashed;
 }
 
-.attack-grid-item {
-  overflow: hidden; 
-}
-
-/* --- Interaction Styles --- */
-
+/* Style the draggable item itself */
 .attack-grid-item.is-draggable {
   cursor: grab;
 }
@@ -301,41 +310,20 @@ function toggleSelection(attackId) {
   cursor: grabbing;
 }
 
-/* Add styles for vuedraggable ghost/chosen if needed */
+/* Style the ghost element during drag */
 .attack-grid-layout.draggable-grid .ghost {
   opacity: 0.4;
-  background: var(--color-background-soft);
-  border: 2px dashed var(--vt-c-indigo);
-  border-radius: 8px;
+  background: var(--color-panel-bg);
+  border: 2px dashed var(--color-accent-secondary);
+  border-radius: 0;
+}
+.attack-grid-layout.draggable-grid .ghost > * {
+    /* Hide the content of the ghost card */
+    visibility: hidden;
 }
 
-/* Add other draggable styles if needed */
 
-/* --- Selection Styles --- */
+/* Remove redundant interaction styles */
 
-.attack-grid-item.is-selectable,
-.attack-grid-item.is-revealable {
-  cursor: pointer;
-}
-
-.attack-grid-item.is-selectable:hover:not(.disabled) {
-  transform: translateY(-3px);
-  box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-  border-color: var(--vt-c-indigo); 
-}
-
-.attack-grid-item.selected {
-  border-color: var(--primary-color); 
-  background-color: rgba(var(--primary-color-rgb), 0.1); 
-}
-
-.attack-grid-item.disabled {
-  opacity: 0.5; 
-  cursor: not-allowed;
-  border-color: var(--color-border-hover); /* Reset border */
-  background-color: var(--color-background); /* Reset background */
-  transform: none;
-  box-shadow: none;
-}
 
 </style> 

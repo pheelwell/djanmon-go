@@ -1,27 +1,27 @@
 <template>
-  <div>
+  <div class="auth-container">
     <h2>Register</h2>
-    <form @submit.prevent="handleRegister">
-      <div>
+    <form @submit.prevent="handleRegister" class="auth-form">
+      <div class="form-group">
         <label for="username">Username:</label>
         <input type="text" id="username" v-model="username" required />
       </div>
-      <div>
+      <div class="form-group">
         <label for="email">Email (optional):</label>
         <input type="email" id="email" v-model="email" />
       </div>
-      <div>
+      <div class="form-group">
         <label for="password">Password:</label>
         <input type="password" id="password" v-model="password" required />
       </div>
-      <div>
+      <div class="form-group">
         <label for="password2">Confirm Password:</label>
         <input type="password" id="password2" v-model="password2" required />
       </div>
-      <button type="submit" :disabled="loading">Register</button>
-      <p v-if="errorMessage" class="error">{{ errorMessage }}</p>
-       <p v-if="successMessage" class="success">{{ successMessage }}</p>
-      <p>Already have an account? <router-link to="/login">Login here</router-link></p>
+      <button type="submit" :disabled="loading" class="btn btn-primary">{{ loading ? '...' : 'Register' }}</button>
+      <p v-if="errorMessage" class="error-message">⚠️ {{ errorMessage }}</p>
+      <p v-if="successMessage" class="success-message">✅ {{ successMessage }}</p>
+      <p class="form-footer">Already have an account? <router-link to="/login">Login here</router-link></p>
     </form>
   </div>
 </template>
@@ -63,12 +63,6 @@ const handleRegister = async () => {
 
   if (success) {
     successMessage.value = 'Registration successful! You can now log in.';
-    // Optionally clear form or redirect
-    // username.value = '';
-    // email.value = '';
-    // password.value = '';
-    // password2.value = '';
-    // setTimeout(() => router.push('/login'), 2000); // Redirect after delay
   } else {
     const errorData = authStore.registerError;
      if (errorData && typeof errorData === 'object') {
@@ -85,56 +79,98 @@ const handleRegister = async () => {
 
 <style scoped>
 /* Reuse styles from LoginView or create shared styles */
-.error {
-  color: red;
+.auth-container {
+    max-width: 350px;
+    margin: 3rem auto;
+    padding: var(--panel-padding);
+    border: var(--border-width) solid var(--color-border);
+    border-radius: 0;
+    box-shadow: inset 0 0 0 2px var(--color-bg), 3px 3px 0px var(--color-border);
+    background-color: var(--color-panel-bg);
+    font-family: var(--font-primary);
 }
-.success {
-  color: green;
+
+h2 {
+    font-size: 1.3em; 
+    color: var(--color-accent-secondary);
+    margin: -15px -15px 20px -15px; /* Extend to edges */
+    padding: 8px 15px;
+    text-align: center;
+    border-bottom: var(--border-width) solid var(--color-border);
+    text-transform: uppercase;
+    background-color: var(--color-border);
+    color: var(--color-text);
+    font-weight: normal;
+    box-shadow: inset 0 0 0 1px var(--color-panel-bg);
 }
-div {
-    max-width: 400px;
-    margin: 2rem auto;
-    padding: 2rem;
-    border: 1px solid #ccc;
-    border-radius: 8px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+
+.auth-form {
+    display: flex;
+    flex-direction: column;
+    gap: 15px; /* Gap between form elements */
 }
+
+.form-group {
+    /* No extra styles needed */
+}
+
 label {
     display: block;
-    margin-bottom: 0.5rem;
+    margin-bottom: 5px;
+    font-weight: normal;
+    font-size: 0.9em;
+    color: var(--color-text);
+    text-transform: uppercase;
 }
-input {
-    width: 100%;
-    padding: 0.5rem;
-    margin-bottom: 1rem;
-    border: 1px solid #ccc;
-    border-radius: 4px;
+
+/* Assume input uses global styles */
+input[type="text"],
+input[type="email"],
+input[type="password"] {
+    /* Inherit from main.css */
 }
-button {
-    padding: 0.75rem 1.5rem;
-    background-color: #42b983; /* Vue green */
-    color: white;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    transition: background-color 0.3s;
+
+/* Assume button uses global .btn styles */
+.btn {
+    width: 100%; 
+    margin-top: 10px;
 }
-button:disabled {
-    background-color: #ccc;
-    cursor: not-allowed;
+
+.form-footer {
+    margin-top: 15px;
+    text-align: center;
+    font-size: 0.9em;
+    color: var(--color-text);
 }
-button:hover:not(:disabled) {
-    background-color: #36a374;
+
+.form-footer a {
+    color: var(--color-accent-secondary);
+    text-decoration: none;
 }
-p {
-    margin-top: 1rem;
+
+.form-footer a:hover {
+    color: var(--color-accent);
 }
-.error {
-    margin-top: 1rem;
-    color: #e74c3c; /* Red */
+
+/* Reusing error/success message styles */
+.error-message, .success-message {
+    padding: 8px 10px;
+    border-radius: 0;
+    font-weight: normal;
+    text-align: center;
+    border: 1px solid;
+    font-size: 0.9em;
+    margin-top: 0; /* Remove potential extra margin */
 }
-.success {
-     margin-top: 1rem;
-     color: #2ecc71; /* Green */
+.error-message {
+    background-color: rgba(233, 69, 96, 0.1);
+    color: var(--color-accent);
+    border-color: var(--color-accent);
 }
+.success-message {
+    background-color: rgba(53, 208, 104, 0.1);
+    color: var(--color-hp-high);
+    border-color: var(--color-hp-high);
+}
+
 </style> 

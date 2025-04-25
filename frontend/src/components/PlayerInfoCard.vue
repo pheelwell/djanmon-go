@@ -104,187 +104,179 @@ const cardClasses = computed(() => [
 <template>
   <div :class="cardClasses">
       <h3>{{ player?.username }} <span v-if="player.is_bot" class="bot-label">(BOT)</span></h3>
-      <div class="stat-badges-container">
+      <!-- Container for Badges -->
+      <div class="badges-area">
           <!-- Stat Stages -->
-          <span class="stat-badges">
+          <div class="stat-badges-container">
              <template v-for="(stage, stat) in statStages" :key="stat">
-                 <span v-if="stage !== 0" :class="[
-                     'stat-badge',
-                     getStatClass(stage)
-                 ]">
+                 <span v-if="stage !== 0" :class="['stat-badge', getStatClass(stage)]">
                      {{ stat.toUpperCase() }} {{ formatStage(stage) }}
                  </span>
              </template>
-          </span>
+          </div>
           <!-- Custom Statuses -->
-          <span class="custom-statuses">
+          <div class="custom-statuses-container">
              <template v-for="(value, name) in customStatuses" :key="name">
-                 <span v-if="value"
-                       class="custom-status-badge"
-                       :style="getStatusColorStyle(name)">
+                 <span v-if="value" class="custom-status-badge" :style="getStatusColorStyle(name)">
                      {{ name.replace(/_/g, ' ').toUpperCase() }} {{ typeof value === 'number' ? '(' + value + ')' : '' }}
                  </span>
              </template>
-          </span>
+          </div>
       </div>
+      <!-- HP Display at the bottom -->
       <div class="hp-display">
-         <p>HP: {{ currentHp }} / {{ player?.hp }}</p>
-         <progress
-            :value="currentHp"
-            :max="player?.hp"
-            :class="hpBarClass"
-        ></progress>
+         <span class="hp-label">HP:</span>
+         <span class="hp-values">{{ currentHp }} / {{ player?.hp }}</span>
+         <div class="hp-bar-container">
+             <div :class="['hp-bar-fill', hpBarClass]" :style="{ width: hpPercentage + '%' }"></div>
+         </div>
       </div>
   </div>
 </template>
 
 <style scoped>
-/* Styles copied and adapted from BattleView.vue */
 .player-card {
-    min-width: 280px;
-    flex: 1;
-    padding: 1rem 1.5rem;
-    border: 1px solid var(--color-border);
-    border-radius: 8px;
-    background-color: var(--color-background-mute);
+    /* Uses .panel styles from BattleView by default */
     display: flex;
     flex-direction: column;
-    gap: 0.6rem;
+    gap: 8px; /* Adjust gap */
+    padding: 10px; /* Match panel padding */
+    min-width: 150px; /* Allow smaller cards */
+    font-family: var(--font-primary);
+    line-height: 1.3;
+    background-color: var(--color-panel-bg); /* Ensure background is set */
+    border: var(--border-width) solid var(--color-border);
+    box-shadow: inset 0 0 0 2px var(--color-bg); /* Inner border */
+    border-radius: 0;
 }
 
-.player-card.user { border-left: 4px solid var(--vt-c-blue); }
-.player-card.opponent { border-left: 4px solid var(--vt-c-red); }
+.player-card.opponent {
+    /* Optional: slightly different bg or border for opponent? */
+    /* Example: border-color: var(--color-accent); */
+}
 
-.player-card h3 {
+.player-card h3 { /* Player Name */
     margin: 0;
-    color: var(--color-heading);
-    font-size: 1.3em;
-    font-weight: 600;
-    line-height: 1.2;
-}
-.player-card h3 span {
+    color: var(--color-accent-secondary);
+    font-size: 1.1em;
     font-weight: normal;
-    font-size: 0.9em;
-    color: var(--color-text-muted);
-}
-
-.player-card p { /* HP Text */
-    margin: 0;
-    text-align: right;
-    font-size: 0.9em;
-    color: var(--color-text);
-    font-weight: 500;
-    white-space: nowrap;
-    flex-shrink: 0;
-    max-width: 80px;
-}
-
-.player-card progress {
-    width: auto;
-    height: 12px;
-    flex-grow: 1;
-    -webkit-appearance: none;
-    appearance: none;
-    background-color: var(--color-background-soft);
-    border: 1px solid var(--color-border);
-    border-radius: 6px;
-    overflow: hidden;
-}
-
-progress::-webkit-progress-bar {
-    background-color: var(--color-background-soft);
-    border-radius: 6px;
-}
-
-progress::-webkit-progress-value {
-    border-radius: 6px;
-    transition: width 0.5s ease-in-out;
-}
-
-progress::-moz-progress-bar {
-    border-radius: 6px;
-    transition: width 0.5s ease-in-out;
-}
-
-.hp-bar-user::-webkit-progress-value,
-.hp-bar-user::-moz-progress-bar {
-    background-color: var(--vt-c-blue);
-}
-.hp-bar-opponent::-webkit-progress-value,
-.hp-bar-opponent::-moz-progress-bar {
-    background-color: var(--vt-c-red);
-}
-
-progress.hp-medium::-webkit-progress-value,
-progress.hp-medium::-moz-progress-bar {
-    background-color: var(--vt-c-yellow-darker);
-}
-
-progress.hp-low::-webkit-progress-value,
-progress.hp-low::-moz-progress-bar {
-    background-color: var(--vt-c-red-dark);
-}
-
-.hp-bar-opponent.hp-low::-webkit-progress-value,
-.hp-bar-opponent.hp-low::-moz-progress-bar {
-     background-color: var(--vt-c-red-dark);
-}
-
-.stat-badges-container {
-    min-height: 20px; /* Prevents layout shifts */
-    display: flex;
-    flex-direction: column;
-    gap: 0.4rem; /* Space between stat badges and custom statuses */
-}
-
-.stat-badges, .custom-statuses {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.4rem;
-}
-
-.stat-badge {
-    display: inline-block;
-    padding: 0.2em 0.5em;
-    font-size: 0.8em;
-    font-weight: 600;
-    border-radius: 4px;
-    color: var(--vt-c-white-soft);
-    text-shadow: 1px 1px 1px rgba(0,0,0,0.3);
-    border: 1px solid transparent; /* Add for consistency */
-}
-
-.stat-badge.stat-up {
-    background-color: var(--vt-c-green);
-    border-color: var(--vt-c-green-dark);
-}
-
-.stat-badge.stat-down {
-    background-color: var(--vt-c-red);
-    border-color: var(--vt-c-red-dark);
-}
-
-.custom-status-badge {
-    display: inline-block;
-    padding: 0.2em 0.5em;
-    font-size: 0.8em;
-    font-weight: 500;
-    border-radius: 4px;
-    text-transform: capitalize;
-    border: 1px solid transparent;
-}
-
-.hp-display {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    margin-top: auto; /* Pushes HP to bottom */
+    line-height: 1.2;
+    text-align: center;
+    border-bottom: 1px dashed var(--color-border);
+    padding-bottom: 4px;
+    margin-bottom: 4px;
+    text-transform: uppercase;
 }
 
 .bot-label {
-    font-weight: normal;
     font-size: 0.8em;
-    color: var(--color-text-muted);
-    margin-left: 0.3em;
+    color: var(--color-log-system);
+    margin-left: 5px;
 }
+
+.badges-area {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-height: 30px; /* Ensure space even if empty */
+    margin-bottom: auto; /* Push HP bar to bottom */
+}
+
+.stat-badges-container,
+.custom-statuses-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    justify-content: center; /* Center badges */
+}
+
+.stat-badge, .custom-status-badge {
+    display: inline-block;
+    padding: 1px 5px;
+    font-size: 0.8em;
+    font-weight: normal;
+    border-radius: 0;
+    border: 1px solid;
+    line-height: 1.1;
+    text-transform: uppercase;
+}
+
+.stat-badge.stat-up {
+    color: var(--color-stat-up);
+    border-color: var(--color-stat-up);
+    background-color: rgba(83, 189, 235, 0.1); /* Faint background */
+}
+
+.stat-badge.stat-down {
+    color: var(--color-stat-down);
+    border-color: var(--color-stat-down);
+    background-color: rgba(233, 69, 96, 0.1);
+}
+
+.custom-status-badge {
+    /* Style is dynamically generated via :style */
+    /* Add base styling */
+    font-weight: normal;
+}
+
+/* --- HP Bar --- */
+.hp-display {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+}
+
+.hp-label {
+    font-size: 0.9em;
+    color: var(--color-text);
+    flex-shrink: 0;
+}
+
+.hp-values {
+    font-size: 0.9em;
+    color: var(--color-text);
+    flex-shrink: 0;
+    margin-left: auto; /* Push values to right */
+    font-weight: bold;
+}
+
+.hp-bar-container {
+    flex-grow: 1;
+    height: 15px; /* Pixel-friendly height */
+    background-color: #333; /* Dark background for bar */
+    border: 1px solid var(--color-border);
+    padding: 1px; /* Inner padding to contain fill */
+    box-shadow: inset 1px 1px 0px rgba(0,0,0,0.5); /* Inner shadow */
+    position: relative;
+}
+
+.hp-bar-fill {
+    height: 100%;
+    transition: width 0.5s ease-in-out;
+    position: absolute;
+    top: 0;
+    left: 0;
+    /* Base color if none match */
+    background-color: var(--color-text); 
+}
+
+.hp-bar-high {
+    background-color: var(--color-hp-high);
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.2); /* Optional highlight */
+}
+.hp-bar-medium {
+    background-color: var(--color-hp-medium);
+}
+.hp-bar-low {
+    background-color: var(--color-hp-low);
+}
+
+/* Remove old progress element styles */
+/* progress { ... } */
+/* progress::-webkit-progress-bar { ... } */
+/* progress::-webkit-progress-value { ... } */
+/* progress::-moz-progress-bar { ... } */
+/* .hp-bar-user::-webkit-progress-value, ... etc */
+
 </style> 

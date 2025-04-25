@@ -116,6 +116,9 @@ def apply_std_damage(context, base_power, target_role=None):
         context['hp'][target] = new_hp
         context['state_changed'] = True
         target_name = get_player_name(context, target) or target
+        # --- ADD AUTOMATIC DAMAGE LOGGING --- 
+        log(context, f"{target_name} took {final_damage} damage.", "damage", "script", {"damage_dealt": final_damage})
+        # --- END LOGGING --- 
         return final_damage # Return damage dealt
     else:
         return 0 # Return 0 if HP didn't change
@@ -148,7 +151,6 @@ def apply_std_hp_change(context, hp_change, target_role=None):
         context['state_changed'] = True
         target_name = get_player_name(context, target) or target
         effect = "heal" if actual_change > 0 else "damage" # Treat HP cost as damage type
-        #log(context, f"{target_name} took {actual_change} {effect}.", effect, target_role)
         return actual_change # Return the actual change
     else:
         return 0 # Return 0 if no change
@@ -191,7 +193,6 @@ def apply_std_stat_change(context, stat, mod, target_role=None):
         context['state_changed'] = True
         target_name = get_player_name(context, target) or target
         change_dir = "raised" if mod > 0 else "lowered"
-        log(context, f"{target_name}'s {stat.upper()} was {change_dir} to {new_stage}.", "stat_change", target_role)
     else:
         limit_dir = "highest" if mod > 0 else "lowest"
         target_name = get_player_name(context, target) or target
@@ -370,7 +371,6 @@ def remove_custom_status(context, role, status_name):
     if role not in context.get('custom_statuses', {}):
         # Use logger for internal error
         logger.warning(f"Lua API Error: Invalid role '{role}' used in remove_custom_status.")
-        # log(context, f"Invalid role '{role}' used in remove_custom_status", "error") # REMOVED
         return
         
     player_statuses = context['custom_statuses'][role]
@@ -389,12 +389,10 @@ def modify_custom_status(context, role, status_name, change):
     if role not in context.get('custom_statuses', {}):
         # Use logger for internal error
         logger.warning(f"Lua API Error: Invalid role '{role}' used in modify_custom_status.")
-        # log(context, f"Invalid role '{role}' used in modify_custom_status", "error") # REMOVED
         return
     if not isinstance(change, (int, float)):
         # Use logger for internal error
         logger.warning(f"Lua API Error: Invalid change value '{change}' (must be number) used in modify_custom_status for status '{status_name}'.")
-        # log(context, f"Invalid change value '{change}' (must be number) used in modify_custom_status", "error") # REMOVED
         return
         
     player_statuses = context['custom_statuses'][role]
@@ -403,7 +401,6 @@ def modify_custom_status(context, role, status_name, change):
     if not isinstance(current_value, (int, float)):
         # Use logger for internal error
         logger.warning(f"Lua API Error: Cannot modify non-numeric status '{status_name}' (value: {current_value}) with modify_custom_status.")
-        # log(context, f"Cannot modify non-numeric status '{status_name}' (value: {current_value}) with modify_custom_status. Use set_custom_status.", "error") # REMOVED
         return
         
     new_value = current_value + change
@@ -512,7 +509,6 @@ def execute_lua_script(script_content, battle, current_player, opponent, current
                     error_message = f"Lua API Call Error in '{func_name}': {e}"
                     # print(error_message)
                     # Append error to context logs as well?
-                    # log(script_context, error_message, effect_type='error', source='api_wrapper')
                     raise lupa.LuaError(error_message) # Raise LuaError to propagate
             return wrapper
 

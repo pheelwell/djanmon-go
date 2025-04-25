@@ -19,7 +19,6 @@ const displayEmoji = computed(() => props.attack.emoji || '⚔️');
     <!-- Top Right Cost Display -->
     <div v-if="attack.momentum_cost > 0" class="cost-display">
         <span class="energy-symbol">⚡️</span>
-        <!-- Displaying the base cost, actual cost varies -->
         <span class="cost-value">{{ attack.momentum_cost }}</span>
     </div>
 
@@ -32,72 +31,75 @@ const displayEmoji = computed(() => props.attack.emoji || '⚔️');
 </template>
 
 <style scoped>
-/* Styles copied and adapted from BattleView.vue */
 .attack-card-content {
-    position: relative; /* Needed for absolute positioning of cost */
+    position: relative;
     text-align: center;
     display: flex;
     flex-direction: column;
-    /* Align items to start (top) */
     justify-content: flex-start; 
     align-items: center; 
     width: 100%; 
     height: 100%; 
-    padding: 0.5rem 0.2rem; /* Add small horizontal padding */
+    padding: 5px;
+    font-family: var(--font-primary);
+    line-height: 1.3;
+    border: 2px solid var(--color-border);
+    background-color: var(--color-panel-bg);
+    box-shadow: 2px 2px 0px var(--color-border);
+    border-radius: 0;
 }
 
 .cost-display {
     position: absolute;
-    top: 0.2rem;      /* Reduced */
-    right: 0.2rem;    /* Reduced */
+    top: 3px;
+    right: 3px;
     display: flex;
     align-items: center;
-    gap: 0.15em;      /* Slightly reduced gap */
-    background-color: rgba(0, 0, 0, 0.2); 
-    padding: 0.05rem 0.3rem; /* Reduced padding */
-    border-radius: 4px; /* Slightly smaller radius */
-    font-size: 0.75em; /* Slightly smaller font */
-    font-weight: bold;
-    color: var(--vt-c-yellow); 
-    z-index: 1; 
+    gap: 2px;
+    background-color: var(--color-bg);
+    padding: 1px 4px;
+    border: 1px solid var(--color-border);
+    font-size: 0.8em;
+    font-weight: normal;
+    color: var(--color-momentum-user);
+    z-index: 1;
+    border-radius: 0;
 }
 
 .energy-symbol {
-    font-size: 1.1em;
+    font-size: 1em;
 }
 
 .emoji {
-    font-size: 2em; 
-    margin-bottom: 0.2rem; /* Adjust margin */
-    margin-top: 0.5rem; /* Add some top margin to push down from cost */
+    font-size: 2.5em;
+    margin-bottom: 4px;
+    margin-top: 8px;
     line-height: 1;
 }
 
 h4 {
-    margin: 0.2rem 0 0.3rem 0; /* Adjusted margin */
-    font-size: 0.95em;
-    color: var(--color-heading);
-    font-weight: 600;
+    margin: 2px 0 4px 0;
+    font-size: 1em;
+    color: var(--color-accent-secondary);
+    font-weight: normal;
     line-height: 1.2;
+    text-transform: uppercase;
 }
 
 .power {
-    font-size: 0.8em;
-    color: var(--vt-c-orange);
-    font-weight: bold;
-    margin: 0 0 0.3rem 0;
+    font-size: 0.9em;
+    color: var(--color-stat-up);
+    font-weight: normal;
+    margin: 0 0 4px 0;
 }
 
 .desc {
-    font-size: 0.75em;
-    color: var(--color-text-mute);
-    line-height: 1.2;
+    font-size: 0.8em;
+    color: var(--color-text);
+    line-height: 1.3;
     margin: 0;
-    max-width: 95%; /* Slightly increase max-width */
-    margin-top: auto; /* Push description towards the bottom */
-    padding-bottom: 0.2rem; /* Add slight padding at the very bottom */
+    max-width: 95%;
+    margin-top: auto;
+    padding-bottom: 2px;
 }
-
-/* Remove old .desc.cost style */
-/* .desc.cost { ... } */
 </style> 

@@ -149,7 +149,7 @@ onBeforeUnmount(() => {
                   aria-hidden="true" 
                   :key="`${battleId}-separator-${index}`" 
               >
-                <!-- Separator content (usually empty or just the line) -->
+                <hr /> <!-- Use an actual hr for semantics -->
               </li>
 
               <!-- 2. Debug Entry (Conditionally Rendered) -->
@@ -158,17 +158,12 @@ onBeforeUnmount(() => {
                       :class="{
                           'log-entry-container': true,
                           'source-debug': true,
-                          'log-system': true, /* Align center like system */
+                          'log-system': true, /* Align center */
                           'log-debug-entry': true 
                       }"
                       :key="`${battleId}-debug-${index}`" 
                   >
-                      <span
-                         :class="[
-                             'log-bubble',
-                             'effect-info', /* Default style for debug */
-                         ]"
-                      >
+                      <span :class="['log-bubble', 'effect-info', 'log-debug-bubble']">
                           {{ entry.text }}
                       </span>
                   </li>
@@ -198,42 +193,40 @@ onBeforeUnmount(() => {
                          entry.effect_type === 'stat_change' && entry.effect_details?.mod < 0 ? 'stat-arrow-down' : ''
                      ]"
                   >
-                      <!-- Indicator Removed -->
-                      <!-- <span v-if="hasAssociatedDebug(index)" class="debug-toggle-indicator">
-                         {{ isExpanded(index) ? '▼' : '▶' }}
-                      </span> -->
+                      <!-- Icons instead of arrows for stat changes -->
+                      <span v-if="entry.effect_type === 'stat_change' && entry.effect_details?.mod > 0" class="stat-icon up">⬆️</span>
+                      <span v-if="entry.effect_type === 'stat_change' && entry.effect_details?.mod < 0" class="stat-icon down">⬇️</span>
                       <span v-if="entry.effect_type === 'action' && entry.effect_details?.emoji" class="log-emoji">{{ entry.effect_details.emoji }}</span>
-                      <span v-if="entry.effect_type === 'stat_change' && entry.effect_details?.mod > 0" class="stat-arrow up">▲</span>
-                      <span v-if="entry.effect_type === 'stat_change' && entry.effect_details?.mod < 0" class="stat-arrow down">▼</span>
                       {{ entry.text }}
                   </span>
               </li>
           </template>
       </TransitionGroup>
-      <div v-if="!logEntries || logEntries.length === 0" class="empty-log-message">Battle log is empty.</div>
+      <div v-if="!logEntries || logEntries.length === 0" class="empty-log-message">Battle Log Is Empty...</div>
       <div style="height: 1px; flex-shrink: 0;"></div> <!-- Ensures scroll height calculation -->
   </div>
 </template>
 
 <style scoped>
-/* Styles adapted from BattleView.vue messages section */
 .battle-log-container {
-    padding: 0.5rem;
-    min-height: 200px;
+    padding: 5px; /* Reduced padding */
+    min-height: 150px; /* Adjusted min height */
     max-height: 400px;
-    background-color: var(--color-background);
+    background-color: var(--color-bg); /* Darker background inside */
     border: 1px solid var(--color-border);
-    border-radius: 6px;
+    border-radius: 0; /* No border radius */
     display: flex;
     flex-direction: column;
     overflow-y: auto;
-    overflow-x: hidden; /* Prevent horizontal scroll */
+    overflow-x: hidden; 
+    font-family: var(--font-primary);
+    line-height: 1.3;
 }
 
 .turn-summary-list {
     flex-grow: 1;
     list-style: none;
-    padding: 0 0.5rem;
+    padding: 0 5px; /* Inner padding */
     margin: 0;
 }
 
@@ -242,171 +235,147 @@ onBeforeUnmount(() => {
     display: flex;
     justify-content: center;
     align-items: center;
-    color: var(--color-text-mute);
+    color: var(--color-log-system); /* Use system log color */
     font-style: italic;
+    font-size: 1em;
+    padding: 20px;
+    text-transform: uppercase;
 }
 
-/* Container for each log line - uses Flex */
 .log-entry-container {
-    margin-bottom: 0.5rem;
+    margin-bottom: 6px;
     display: flex;
 }
 
-/* --- Alignment by Source --- */
-.log-entry-container.log-user {
-   justify-content: flex-start;
-}
-.log-entry-container.log-opponent {
-    justify-content: flex-end;
-}
-.log-entry-container.log-system {
-   justify-content: center;
-}
+/* Alignment by Source */
+.log-entry-container.log-user { justify-content: flex-start; }
+.log-entry-container.log-opponent { justify-content: flex-end; }
+.log-entry-container.log-system { justify-content: center; }
 
-/* The bubble itself */
 .log-bubble {
-    padding: 0.4rem 0.8rem;
-    border-radius: 15px;
-    max-width: 70%;
+    padding: 4px 8px;
+    border-radius: 0; /* No rounded corners */
+    max-width: 75%;
     word-wrap: break-word;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+    box-shadow: none; /* Remove shadow */
     line-height: 1.3;
     display: inline-flex;
     align-items: center;
-    gap: 0.3em;
-    border: 1px solid transparent;
+    gap: 4px;
+    border: 1px solid var(--color-border); /* Default border */
     transition: background-color 0.2s ease, color 0.2s ease;
+    font-size: 0.9em;
 }
 
-/* --- Log Bubble Styling by Source --- */
+/* Bubble Styling by Source */
 .log-entry-container.source-player1 .log-bubble,
 .log-entry-container.source-player2 .log-bubble {
-    background-color: var(--vt-c-indigo); /* Default player bubble */
-    color: white;
+    background-color: var(--color-panel-bg); /* Player bubbles match panel */
+    color: var(--color-text); /* Player text */
+    /* Distinguish user/opponent slightly? */
+    /* border-color: var(--color-border-hover); */ 
 }
-/* Adjust rounding based on side */
 .log-entry-container.log-user .log-bubble {
-    border-bottom-left-radius: 3px;
+    border-left-color: var(--color-log-user); /* Accent border */
+    border-left-width: 3px;
 }
 .log-entry-container.log-opponent .log-bubble {
-     border-bottom-right-radius: 3px;
-     border-bottom-left-radius: 15px; /* Keep other corners rounded */
+    border-right-color: var(--color-log-opponent);
+    border-right-width: 3px;
 }
 
 .log-entry-container.source-script .log-bubble {
-    background-color: #5a5f89; /* Distinct color for script/system actions */
-    color: white;
+    background-color: var(--color-bg); /* Darker */
+    color: var(--color-log-system);
+    border-color: var(--color-border);
 }
 
 .log-entry-container.source-system .log-bubble {
-    color: var(--color-text-mute);
+    color: var(--color-log-system);
     background-color: transparent;
-    box-shadow: none;
-    font-style: italic;
     border: none;
-    padding: 0.1rem 0.5rem;
+    font-style: italic;
+    font-size: 0.9em;
+    padding: 2px 5px;
 }
 
-.log-entry-container.source-debug .log-bubble {
+.log-debug-bubble {
     color: #666;
     background-color: transparent;
-    box-shadow: none;
+    border: 1px dashed #444;
     font-style: italic;
-    opacity: 0.6;
-    font-size: 0.85em;
-    padding: 0.1rem 0.5rem;
-    border: none;
+    opacity: 0.8;
+    font-size: 0.8em;
+    padding: 1px 4px;
 }
 
-/* --- Log Bubble Styling by Effect Type --- */
-/* Actions usually keep their source styling */
-
+/* Bubble Styling by Effect Type */
 .log-bubble.effect-damage {
-    background-color: var(--vt-c-red-soft);
-    color: var(--vt-c-red-dark);
-    border-color: var(--vt-c-red);
+    background-color: rgba(233, 69, 96, 0.1); /* Faint red */
+    color: var(--color-accent); /* Red text */
+    border-color: var(--color-accent);
 }
 
 .log-bubble.effect-heal {
-    background-color: var(--vt-c-green-soft);
-    color: var(--vt-c-green-dark);
-    border-color: var(--vt-c-green);
+    background-color: rgba(53, 208, 104, 0.1); /* Faint green */
+    color: var(--color-hp-high); /* Green text */
+    border-color: var(--color-hp-high);
 }
 
-/* Stat change bubble itself can be neutral, arrows provide visual */
 .log-bubble.effect-stat_change {
-    background-color: var(--color-background-soft); /* Subtle background */
+    background-color: var(--color-panel-bg);
     color: var(--color-text);
-    border-color: var(--color-border-hover);
+    border-color: var(--color-border);
 }
 
 .log-bubble.effect-status_apply,
 .log-bubble.effect-status_remove,
 .log-bubble.effect-status_effect {
-     background-color: var(--color-background-mute);
+     background-color: var(--color-panel-bg);
      color: var(--color-text);
      border-style: dashed;
      border-color: var(--color-border-hover);
 }
 
 .log-bubble.effect-info {
-    /* Keep neutral, source styles will apply */
-    color: var(--color-text);
-}
-/* Override for system/script info */
-.log-entry-container.source-system .log-bubble.effect-info,
-.log-entry-container.source-script .log-bubble.effect-info {
-     color: var(--color-text-mute);
-     background-color: transparent;
-     box-shadow: none;
-     font-style: italic;
+    /* Keep base styles */
 }
 
 .log-bubble.effect-error {
-    background-color: var(--vt-c-red-dark);
-    color: white;
+    background-color: var(--color-accent);
+    color: var(--color-bg);
     font-weight: bold;
     border: none;
 }
 
-/* --- Icon/Arrow Styles --- */
-.stat-arrow { display: inline-block; margin-right: 0.2em; font-weight: bold; }
-.stat-arrow.up { color: var(--vt-c-green); }
-.stat-arrow.down { color: var(--vt-c-red); }
-.log-emoji { margin-right: 0.3em; font-size: 1.1em; line-height: 1; }
+/* Icon/Arrow Styles */
+.stat-icon { display: inline-block; margin-right: 3px; font-size: 1em; line-height: 1; }
+.stat-icon.up { color: var(--color-stat-up); } /* Use theme colors */
+.stat-icon.down { color: var(--color-stat-down); }
+.log-emoji { margin-right: 4px; font-size: 1.1em; line-height: 1; }
 
-/* --- Turn Separator --- */
+/* Turn Separator */
 .log-turn-separator {
     list-style: none;
-    height: 1px;
-    background-color: var(--color-border-hover);
-    margin: 1rem 0.5rem;
-    flex-basis: 100%;
+    height: auto; /* Remove fixed height */
+    margin: 10px 5px;
+    padding: 0;
+}
+.log-turn-separator hr {
+    border: none;
+    border-top: 1px dashed var(--color-border);
 }
 
-/* --- Debug Toggle Styles --- */
+/* Debug Toggle Styles */
 .log-entry-container.can-expand .log-bubble {
-  /* No extra padding needed now */
-  /* padding-left: 1.5rem; */
-  /* position: relative; */ /* No longer needed for indicator */
+   cursor: pointer;
 }
-
-/* Indicator CSS Removed */
-/* .debug-toggle-indicator { ... } */
-/* .log-entry-container.expanded .debug-toggle-indicator { ... } */
-
-/* Make clickable items have a slight hover effect */
 .log-entry-container.can-expand:hover .log-bubble {
-  filter: brightness(1.1);
+  filter: brightness(1.2);
+  border-color: var(--color-accent-secondary);
 }
 
-/* Debug entries themselves (already styled, but we added log-debug-entry class) */
-.log-debug-entry .log-bubble {
-   /* Minor adjustments if needed */
-   opacity: 0.8; 
-}
-
-/* --- Log Item Animation --- */
+/* Animations (Keep as is) */
 .log-item-enter-active,
 .log-item-leave-active {
   transition: all 0.4s ease;
@@ -416,7 +385,6 @@ onBeforeUnmount(() => {
   opacity: 0;
   transform: translateY(10px);
 }
-/* Ensure moving items also transition smoothly */
 .log-item-move {
   transition: transform 0.4s ease;
 }

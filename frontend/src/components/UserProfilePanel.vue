@@ -169,8 +169,46 @@ const allowBotChallengesModel = computed({
 
 .bot-challenge-toggle input[type="checkbox"] {
   cursor: pointer;
-  width: 1rem;
-  height: 1rem;
+  /* Remove default appearance */
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  /* Custom Styling */
+  width: 14px; /* Pixel-friendly size */
+  height: 14px;
+  background-color: var(--color-bg); /* Dark background */
+  border: 1px solid var(--color-border);
+  position: relative;
+  display: inline-block;
+  vertical-align: middle; /* Align with text */
+  border-radius: 0; /* No rounded corners */
+  box-shadow: 1px 1px 0px var(--color-border); /* Pixel shadow */
+}
+
+.bot-challenge-toggle input[type="checkbox"]:checked {
+  background-color: var(--color-accent-secondary); /* Use theme color for checked */
+  border-color: var(--color-border);
+}
+
+/* Custom Checkmark */
+.bot-challenge-toggle input[type="checkbox"]:checked::after {
+  content: '';
+  display: block;
+  position: absolute;
+  /* Style a simple pixel checkmark */
+  left: 4px;
+  top: 1px;
+  width: 3px;
+  height: 7px;
+  border: solid var(--color-bg); /* Checkmark color */
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+.bot-challenge-toggle input[type="checkbox"]:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    box-shadow: none;
 }
 
 .loading-indicator {

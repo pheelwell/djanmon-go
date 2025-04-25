@@ -1,6 +1,9 @@
 @import './base.css';
 
-body {
+/* Remove conflicting body styles from main.css, */
+/* let base.css handle font, background, text color, line-height, etc. */
+
+/* body {
   color: var(--color-text);
   background: var(--color-background);
   transition: color 0.5s,
@@ -8,102 +11,99 @@ body {
   line-height: 1.6;
   font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu,
     Cantarell, 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
-  font-size: 16px; /* Increased base font size slightly */
+  font-size: 16px; 
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-}
+} */
 
 #app {
-  max-width: 1280px;
+  max-width: 100%; /* Allow app to potentially fill width */
   margin: 0 auto;
-  /* Removed default padding, can be added back if needed */
-  /* padding: 2rem; */
   font-weight: normal;
-  /* Ensure app takes full height */
   min-height: 100vh; 
-  display: flex; /* Use flexbox for layout */
-  flex-direction: column; /* Stack header/content vertically */
+  display: flex;
+  flex-direction: column;
 }
 
 /* Let RouterView take remaining height */
-.router-view-container { /* Add a wrapper if needed, or apply to RouterView directly if possible */
+.router-view-container { 
   flex-grow: 1; 
 }
 
+/* Update link styles */
 a,
-.green {
+.green { /* Keep .green if used elsewhere */
   text-decoration: none;
-  color: var(--color-heading); /* Use heading color for links */
-  transition: 0.4s;
-  /* padding: 3px; */ /* Remove padding */
+  color: var(--color-accent-secondary); /* Use secondary accent for links */
+  transition: 0.2s;
 }
 
 @media (hover: hover) {
   a:hover {
-    /* background-color: hsla(160, 100%, 37%, 0.2); */ /* Remove default hover background */
-    color: var(--vt-c-green); /* Use a specific green for hover */
+    color: var(--color-accent); /* Use primary accent for hover */
   }
 }
 
-/* Remove media query styling specific to the old two-column layout */
-/* @media (min-width: 1024px) {
-  body {
-    display: flex;
-    place-items: center;
-  }
+/* Remove old layout media query */
+/* @media (min-width: 1024px) { ... } */
 
-  #app {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    padding: 0 2rem;
-  }
-} */
-
-/* --- Basic Form Styling (can be expanded) --- */
+/* --- Basic Form/Button Styling (Use new theme) --- */
 input,
 textarea,
 button,
 select {
-  font: inherit;
+  font-family: var(--font-primary); /* Use pixel font */
+  font-size: 1em; /* Inherit base font size */
   margin: 0;
-  padding: 0.5rem;
-  border: 1px solid var(--color-border);
-  border-radius: 4px;
-  background-color: var(--color-background-mute);
+  padding: 8px 10px; /* Adjust padding */
+  border: var(--border-width) solid var(--color-border);
+  border-radius: 0; /* No border radius */
+  background-color: var(--color-panel-bg); /* Use panel background */
   color: var(--color-text);
+  box-shadow: 2px 2px 0px var(--color-border); /* Pixel shadow */
+  image-rendering: pixelated;
 }
 
 input:focus,
 textarea:focus,
 button:focus,
 select:focus {
-  outline: 1px solid var(--vt-c-green);
-  border-color: var(--vt-c-green);
+  outline: none; /* Remove default outline */
+  border-color: var(--color-accent-secondary);
+  box-shadow: 2px 2px 0px var(--color-accent-secondary); /* Highlight shadow */
 }
 
+/* Default Button Style (matches .btn from example) */
 button {
   cursor: pointer;
-  background-color: var(--vt-c-green);
-  color: var(--vt-c-white);
-  border: none;
-  padding: 0.75rem 1.5rem;
-  transition: background-color 0.3s, opacity 0.3s;
+  background-color: var(--color-accent-secondary);
+  color: var(--color-panel-bg);
+  border: var(--border-width) solid var(--color-border); /* Ensure border consistency */
+  padding: 8px 12px;
+  transition: background-color 0.2s ease, color 0.2s ease, transform 0.1s ease;
+  box-shadow: 2px 2px 0px var(--color-border); /* Pixel shadow */
+  text-align: center;
 }
 
-button:hover {
-  background-color: var(--vt-c-green-dark);
+button:hover:not(:disabled) {
+  background-color: var(--color-text);
+  color: var(--color-bg);
+}
+
+button:active:not(:disabled) {
+  transform: translate(1px, 1px);
+  box-shadow: 1px 1px 0px var(--color-border);
 }
 
 button:disabled {
-  background-color: var(--color-border);
-  color: var(--color-text-mute);
+  background-color: var(--color-border); /* Use border color for disabled bg */
+  color: #555; /* Darker text */
   cursor: not-allowed;
   opacity: 0.7;
+  box-shadow: 1px 1px 0px #000; /* Slightly different shadow */
+  transform: none;
 }
 
-/* Add some global margin/padding helpers if desired */
-.mb-1 { margin-bottom: 0.5rem; }
-.mb-2 { margin-bottom: 1rem; }
-.mt-1 { margin-top: 0.5rem; }
-.mt-2 { margin-top: 1rem; }
+/* Remove margin helpers if not needed */
+/* .mb-1 { margin-bottom: 0.5rem; } ... etc */

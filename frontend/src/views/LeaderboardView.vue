@@ -23,10 +23,6 @@ const {
 // Destructure actions
 const { fetchMyStats, fetchLeaderboard } = gameStore;
 
-// NEW: State for hover card
-// const hoveredAttack = ref(null); // Will hold the attack object being hovered
-// const hoverCardStyle = ref({}); // Holds position style for the card
-
 const isLoading = computed(() => isLoadingMyStats.value || isLoadingLeaderboard.value);
 const isAuthenticated = computed(() => authStore.isAuthenticated);
 
@@ -39,114 +35,74 @@ onMounted(() => {
   fetchLeaderboard();
 });
 
-// Helper to format nemesis display
-// const nemesisDisplay = computed(() => {
-//   if (!myStats.value || !myStats.value.nemesis) {
-//     return 'None (yet!)';
-//   }
-//   return `${myStats.value.nemesis.username} (${myStats.value.nemesis.losses_against} losses)`;
-// });
-
-// REPLACED formatLoadout with individual span logic for hover
-// function formatLoadout(attacks) {
-//   if (!attacks || attacks.length === 0) {
-//     return '-';
-//   }
-//   return attacks.map(attack => attack.emoji || attack.name).join(', ');
-// }
-
-// NEW: Hover handlers
-// function handleMouseEnter(attack, event) {
-//   console.log('Mouse Enter:', attack.name, event.target);
-//   hoveredAttack.value = attack;
-//   // Position card slightly below and to the right of the triggering element
-//   const rect = event.target.getBoundingClientRect();
-//   hoverCardStyle.value = {
-//     left: `${rect.left + window.scrollX}px`,
-//     top: `${rect.bottom + window.scrollY + 5}px`, // 5px offset below
-//     opacity: 1,
-//     transform: 'translateY(0)'
-//   };
-//   console.log('Hover Card Style:', hoverCardStyle.value);
-// }
-
-// function handleMouseLeave() {
-//   console.log('Mouse Leave');
-//   hoveredAttack.value = null;
-//   // We don't strictly need to reset style here as v-if removes the element,
-//   // but keeping opacity/transform helps if we change to v-show
-//   hoverCardStyle.value = {
-//       ...hoverCardStyle.value, // Keep position but fade out
-//       opacity: 0,
-//       transform: 'translateY(10px)'
-//   };
-// }
 
 </script>
 
 <template>
-  <div class="leaderboard-view">
+  <div class="leaderboard-view panel">
     <h1>Leaderboard</h1>
 
     <div v-if="leaderboardError" class="error-message">
-      Error loading data: {{ leaderboardError }}
+      ⚠️ Error loading data: {{ leaderboardError }}
     </div>
 
-    <!-- Current User Stats Section (UPDATED) -->
+    <!-- Current User Stats Section (Needs styling in its component) -->
     <UserStatsSummary
         v-if="isAuthenticated && !leaderboardError"
         :stats="myStats"
         :isLoading="isLoadingMyStats"
+        class="user-summary-section" 
     />
 
-    <!-- Leaderboard Table Section (UPDATED) -->
+    <!-- Leaderboard Table Section (Needs styling in its component) -->
     <LeaderboardTable
         :leaderboardData="leaderboardData"
         :isLoading="isLoadingLeaderboard"
+        class="leaderboard-table-section"
     />
-
-    <!-- REMOVED: Attack Card Popover (now inside LeaderboardTable) -->
-    <!-- <div v-if="hoveredAttack" ... > ... </div> -->
 
   </div>
 </template>
 
 <style scoped>
 .leaderboard-view {
+  /* Uses .panel style from HomeView */
   max-width: 900px;
-  margin: 0 auto;
-  padding: 1rem;
+  margin: 1rem auto;
+  padding: var(--panel-padding);
+  font-family: var(--font-primary);
 }
 
-h1, h2 {
+h1 {
+  /* Use panel-title styling */
+  font-size: 1.3em; 
+  color: var(--color-text);
+  margin: -15px -15px 15px -15px; 
+  padding: 8px 15px;
   text-align: center;
-  margin-bottom: 1.5rem;
-  color: var(--color-heading);
+  border-bottom: var(--border-width) solid var(--color-border);
+  text-transform: uppercase;
+  background-color: var(--color-border); 
+  font-weight: normal;
+  box-shadow: inset 0 0 0 1px var(--color-panel-bg);
 }
 
 .error-message {
-  color: var(--vt-c-red);
-  background-color: var(--vt-c-red-soft);
-  padding: 1rem;
-  border-radius: 4px;
-  margin-bottom: 1rem;
+  /* Style adapted from AttackCreator */
+  padding: 8px 10px;
+  border-radius: 0;
+  font-weight: normal;
   text-align: center;
+  margin-bottom: 10px; 
+  border: 1px solid var(--color-accent);
+  font-size: 0.9em;
+  background-color: rgba(233, 69, 96, 0.1);
+  color: var(--color-accent);
 }
 
-/* REMOVED: .loading styles (handled by components) */
-/* REMOVED: .my-stats styles (moved to UserStatsSummary) */
-/* REMOVED: .my-stats h2 styles */
-/* REMOVED: .my-stats-grid styles */
-/* REMOVED: .my-stats p styles */
-/* REMOVED: .my-stats strong styles */
-/* REMOVED: .leaderboard-table-section styles (moved to LeaderboardTable) */
-/* REMOVED: .leaderboard-table styles */
-/* REMOVED: table th, td styles */
-/* REMOVED: table head styles */
-/* REMOVED: table body styles */
-/* REMOVED: column width/alignment styles */
-/* REMOVED: .loadout-cell styles */
-/* REMOVED: .attack-item styles */
-/* REMOVED: .attack-hover-popup styles */
+.user-summary-section,
+.leaderboard-table-section {
+    margin-top: 15px; /* Add space between sections */
+}
 
 </style> 

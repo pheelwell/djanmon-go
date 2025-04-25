@@ -1,18 +1,18 @@
 <template>
-  <div>
+  <div class="auth-container">
     <h2>Login</h2>
-    <form @submit.prevent="handleLogin">
-      <div>
+    <form @submit.prevent="handleLogin" class="auth-form">
+      <div class="form-group">
         <label for="username">Username:</label>
         <input type="text" id="username" v-model="username" required />
       </div>
-      <div>
+      <div class="form-group">
         <label for="password">Password:</label>
         <input type="password" id="password" v-model="password" required />
       </div>
-      <button type="submit" :disabled="loading">Login</button>
-      <p v-if="errorMessage" class="error">{{ errorMessage }}</p>
-      <p>Don't have an account? <router-link to="/register">Register here</router-link></p>
+      <button type="submit" :disabled="loading" class="btn btn-primary">{{ loading ? '...' : 'Login' }}</button>
+      <p v-if="errorMessage" class="error-message">⚠️ {{ errorMessage }}</p>
+      <p class="form-footer">Don't have an account? <router-link to="/register">Register here</router-link></p>
     </form>
   </div>
 </template>
@@ -53,49 +53,89 @@ const handleLogin = async () => {
 </script>
 
 <style scoped>
-.error {
-  color: red;
+.auth-container {
+    max-width: 350px;
+    margin: 3rem auto;
+    padding: var(--panel-padding);
+    border: var(--border-width) solid var(--color-border);
+    border-radius: 0;
+    box-shadow: inset 0 0 0 2px var(--color-bg), 3px 3px 0px var(--color-border);
+    background-color: var(--color-panel-bg);
+    font-family: var(--font-primary);
 }
-div {
-    max-width: 400px;
-    margin: 2rem auto;
-    padding: 2rem;
-    border: 1px solid #ccc;
-    border-radius: 8px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+
+h2 {
+    font-size: 1.3em; 
+    color: var(--color-accent-secondary);
+    margin: -15px -15px 20px -15px; /* Extend to edges */
+    padding: 8px 15px;
+    text-align: center;
+    border-bottom: var(--border-width) solid var(--color-border);
+    text-transform: uppercase;
+    background-color: var(--color-border);
+    color: var(--color-text);
+    font-weight: normal;
+    box-shadow: inset 0 0 0 1px var(--color-panel-bg);
 }
+
+.auth-form {
+    display: flex;
+    flex-direction: column;
+    gap: 15px; /* Gap between form elements */
+}
+
+.form-group {
+    /* No extra styles needed, just contains label+input */
+}
+
 label {
     display: block;
-    margin-bottom: 0.5rem;
+    margin-bottom: 5px;
+    font-weight: normal;
+    font-size: 0.9em;
+    color: var(--color-text);
+    text-transform: uppercase;
 }
-input {
-    width: 100%;
-    padding: 0.5rem;
-    margin-bottom: 1rem;
-    border: 1px solid #ccc;
-    border-radius: 4px;
+
+/* Assume input uses global styles from main.css */
+input[type="text"],
+input[type="password"] {
+    /* Inherit from main.css */
 }
-button {
-    padding: 0.75rem 1.5rem;
-    background-color: #42b983; /* Vue green */
-    color: white;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    transition: background-color 0.3s;
+
+/* Assume button uses global .btn styles */
+.btn {
+    width: 100%; /* Make button full width */
+    margin-top: 10px; /* Add space above button */
 }
-button:disabled {
-    background-color: #ccc;
-    cursor: not-allowed;
+
+.form-footer {
+    margin-top: 15px;
+    text-align: center;
+    font-size: 0.9em;
+    color: var(--color-text); /* Use standard text color */
 }
-button:hover:not(:disabled) {
-    background-color: #36a374;
+
+.form-footer a {
+    color: var(--color-accent-secondary); /* Link color */
+    text-decoration: none;
 }
-p {
-    margin-top: 1rem;
+
+.form-footer a:hover {
+    color: var(--color-accent);
 }
-.error {
-    margin-top: 1rem;
-    color: #e74c3c; /* Red */
+
+.error-message {
+    /* Style adapted from HomeView/AttackCreator */
+    padding: 8px 10px;
+    border-radius: 0;
+    font-weight: normal;
+    text-align: center;
+    border: 1px solid var(--color-accent);
+    font-size: 0.9em;
+    background-color: rgba(233, 69, 96, 0.1);
+    color: var(--color-accent);
+    margin-top: 0; /* Remove extra margin if needed */
 }
+
 </style> 

@@ -55,23 +55,25 @@ function handleClick(attack) {
 <style scoped>
 .attack-list-mobile {
   width: 100%;
+  font-family: var(--font-primary);
 }
 
 .attack-list {
   list-style: none;
   padding: 0;
   margin: 0;
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 0.75rem;
+  display: flex;
+  flex-direction: column; /* Stack items vertically */
+  gap: var(--element-gap); /* Use theme gap */
 }
 
 .attack-list-item {
-  background-color: var(--color-background);
-  border: 1px solid var(--color-border);
-  border-radius: 6px;
-  padding: 0.75rem;
-  transition: background-color 0.2s;
+  /* Let AttackCardDisplay handle background and border */
+  background-color: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 0; /* Remove padding */
+  transition: transform 0.1s ease;
   position: relative;
 }
 
@@ -79,43 +81,45 @@ function handleClick(attack) {
   cursor: pointer;
 }
 
-.attack-list-item.is-actionable:hover {
-  background-color: var(--color-background-mute);
+/* Apply hover style directly to the card */
+.attack-list-item.is-actionable:hover:not(.is-disabled) > :deep(.attack-card-content) {
+  transform: scale(1.02); /* Slight scale */
+  border-color: var(--color-accent-secondary);
+  box-shadow: 2px 2px 0px var(--color-accent-secondary);
 }
 
 /* Style for disabled items */
 .attack-list-item.is-disabled {
-  opacity: 0.5;
+  opacity: 0.6;
   cursor: not-allowed;
-  background-color: var(--color-background); /* Ensure default background */
+}
+.attack-list-item.is-disabled > :deep(.attack-card-content) {
+   border-color: var(--color-border);
+   box-shadow: 1px 1px 0px var(--color-border); 
+   transform: none;
 }
 
-.attack-list-item.is-disabled:hover {
-  /* Prevent hover effect on disabled items */
-  background-color: var(--color-background);
+
+/* Add selected styles if needed (e.g., for favorite selection) */
+.attack-list-item.is-selected > :deep(.attack-card-content) { 
+  border-color: var(--color-accent);
+  box-shadow: 2px 2px 0px var(--color-accent);
 }
 
-/* Add hover/selected styles if interaction is added */
-/* .attack-list-item.selected { */
-/*   border-left: 4px solid var(--primary-color); */
-/*   background-color: rgba(var(--primary-color-rgb), 0.05); */
-/* } */
 
 .empty-list-message {
-  padding: 1.5rem 1rem;
+  padding: 20px 10px;
   text-align: center;
-  color: var(--color-text-mute);
+  color: var(--color-log-system);
   font-style: italic;
   border: 1px dashed var(--color-border);
-  border-radius: 6px;
-  margin-top: 0.5rem;
+  border-radius: 0;
+  margin-top: 5px;
+  text-transform: uppercase;
+  font-size: 1em;
 }
 
-/* Optional selection indicator styling */
-/* .list-item-selection-indicator { ... } */
+/* Remove deep selector if not needed */
+/* .attack-list-item :deep(.attack-card) { ... } */
 
-/* Style the AttackCardDisplay within the list item */
-.attack-list-item :deep(.attack-card) {
-  padding: 0.5rem; 
-}
 </style> 

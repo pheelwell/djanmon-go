@@ -107,46 +107,27 @@ const opponentCustomStatuses = computed(() => {
 // --- Momentum Calculation (Uses displayed state) ---
 const currentMomentumP1 = computed(() => displayedBattleState.value?.current_momentum_player1 ?? 0);
 const currentMomentumP2 = computed(() => displayedBattleState.value?.current_momentum_player2 ?? 0);
-const totalMomentum = computed(() => Math.max(1, currentMomentumP1.value + currentMomentumP2.value)); // Avoid division by zero
+const totalMomentum = computed(() => Math.max(100, currentMomentumP1.value + currentMomentumP2.value)); // Assume base total 100 if both 0?
 
-// Normalized value [0, 1] where 1 means P1 has all momentum
-const normalizedMomentumP1 = computed(() => currentMomentumP1.value / totalMomentum.value);
-
-// Determine pendulum angle/position based on normalized value (Uses displayed state)
-const PENDULUM_MAX_ANGLE = 75; // Max tilt angle
-
-// Calculate angle based on the *current acting player's* momentum (Uses displayed state)
-const pendulumAngle = computed(() => {
-    if (!displayedBattleState.value || !displayedBattleState.value.whose_turn) return 0;
-    
-    const turnRole = displayedBattleState.value.whose_turn;
-    // Use computed momentum values derived from displayed state
-    const currentMomentum = turnRole === 'player1' ? currentMomentumP1.value : currentMomentumP2.value;
-    
-    const scaledMomentum = currentMomentum / MOMENTUM_THRESHOLD; 
-    const angleScale = clamp(scaledMomentum, 0, 1.5); 
-
-    // Base angle: Positive if P1 turn, Negative if P2 turn
-    let angle = angleScale * PENDULUM_MAX_ANGLE * (turnRole === 'player1' ? 1 : -1);
-    angle = clamp(angle, -PENDULUM_MAX_ANGLE, PENDULUM_MAX_ANGLE);
-
-    // Perspective inversion for viewer
-    if (userPlayerRole.value === 'player2') {
-        angle = -angle;
-    }
-    
-    return angle;
+// Calculate percentage for the *user's* momentum bar
+const userMomentumPercent = computed(() => {
+  if (!userPlayerRole.value) return 0;
+  const userMomentum = userPlayerRole.value === 'player1' ? currentMomentumP1.value : currentMomentumP2.value;
+  // Calculate based on a potential max (e.g., 100 or a dynamic value if needed)
+  const maxMomentum = 100; // Or adjust as needed
+  return clamp((userMomentum / maxMomentum) * 100, 0, 100);
 });
 
-// Style object for the pendulum element (Uses pendulumAngle computed)
-const pendulumStyle = computed(() => ({
-  transform: `rotate(${pendulumAngle.value}deg)`
+const userMomentumStyle = computed(() => ({
+  width: `${userMomentumPercent.value}%`
 }));
 
-// Determine whose side the pendulum is leaning towards for styling (Uses displayed state)
-const pendulumSide = computed(() => {
-    if (!displayedBattleState.value || !displayedBattleState.value.whose_turn) return 'center';
-    return displayedBattleState.value.whose_turn === userPlayerRole.value ? 'user' : 'opponent';
+// Calculate percentage for the *opponent's* momentum bar (display purposes)
+const opponentMomentumPercent = computed(() => {
+    if (!userPlayerRole.value) return 0;
+    const opponentMomentum = userPlayerRole.value === 'player1' ? currentMomentumP2.value : currentMomentumP1.value;
+    const maxMomentum = 100; // Or adjust as needed
+    return clamp((opponentMomentum / maxMomentum) * 100, 0, 100);
 });
 
 // Available actions now come directly from the displayed battle data
@@ -157,107 +138,6 @@ const mySelectedAttacks = computed(() => {
         key: `${attack.id}-${index}` // Simple unique key
     }));
 });
-
-// --- Ghost Preview State (Uses displayed state for calculation) ---
-const hoveredAttackCost = ref(null); // { min: X, max: Y }
-const ghostMinAngle = ref(0);
-const ghostMaxAngle = ref(0);
-const ghostMinMomentumValue = ref(0); // Momentum value for the player *after* min cost
-const ghostMaxMomentumValue = ref(0); // Momentum value for the player *after* max cost
-const ghostMinTurnSwitch = ref(false); // Will turn switch if min cost applied?
-const ghostMaxTurnSwitch = ref(false); // Will turn switch if max cost applied?
-const hoveredAttackId = ref(null); // Track ID for hover styling
-
-// Calculate ghost states when hovering (Modify to use displayed state)
-function calculateGhostState(cost) {
-    const turnRole = userPlayerRole.value; // This is based on displayed state
-    // Get momentum from computed properties (already based on displayed state)
-    const currentMomentum = turnRole === 'player1' ? currentMomentumP1.value : currentMomentumP2.value;
-    const opponentRole = turnRole === 'player1' ? 'player2' : 'player1';
-    const opponentMomentum = opponentRole === 'player1' ? currentMomentumP1.value : currentMomentumP2.value;
-
-    let resultingMomentum, resultingOpponentMomentum, turnWillSwitch;
-    let nextTurnRole;
-
-    if (currentMomentum >= cost) {
-        resultingMomentum = currentMomentum - cost;
-        resultingOpponentMomentum = opponentMomentum;
-        turnWillSwitch = false;
-        nextTurnRole = turnRole; // Turn stays with current player
-    } else {
-        const overflow = cost - currentMomentum;
-        resultingMomentum = 0;
-        resultingOpponentMomentum = opponentMomentum + overflow;
-        turnWillSwitch = true;
-        nextTurnRole = opponentRole; // Turn switches to opponent
-    }
-
-    // Calculate angle based on the player whose turn it *would* be
-    const momentumForAngle = turnWillSwitch ? resultingOpponentMomentum : resultingMomentum;
-    const scaledMomentum = clamp(momentumForAngle / MOMENTUM_THRESHOLD, 0, 1.2);
-    let angleRaw = scaledMomentum * PENDULUM_MAX_ANGLE * (nextTurnRole === 'player1' ? 1 : -1);
-
-    // Apply perspective inversion
-    let finalAngle = (userPlayerRole.value === 'player2') ? -angleRaw : angleRaw;
-
-    return { 
-        angle: finalAngle,
-        resultingMomentum: turnWillSwitch ? resultingOpponentMomentum : resultingMomentum, // Momentum of player whose turn it becomes
-        turnSwitch: turnWillSwitch 
-    };
-}
-
-// Update hover state for pendulum preview
-function previewAttackCost(action) { 
-    console.log("Hover detected on AttackGrid item:", action);
-    if (!canAct.value) {
-        console.log("Preview aborted: Not user's turn.");
-        clearAttackCostPreview();
-        return;
-    }
-    if (!action || action.calculated_min_cost === undefined) {
-        console.log("Preview aborted: Action missing or cost data undefined.");
-        clearAttackCostPreview();
-        return;
-    }
-    
-    console.log("Activating pendulum preview.");
-    hoveredAttackId.value = action.id; // Track hovered ID
-    hoveredAttackCost.value = {
-        min: action.calculated_min_cost,
-        max: action.calculated_max_cost,
-        attackId: action.id // Store ID to match tooltip
-    };
-
-    const minState = calculateGhostState(hoveredAttackCost.value.min);
-    const maxState = calculateGhostState(hoveredAttackCost.value.max);
-
-    ghostMinAngle.value = minState.angle;
-    ghostMinMomentumValue.value = minState.resultingMomentum;
-    ghostMinTurnSwitch.value = minState.turnSwitch;
-
-    ghostMaxAngle.value = maxState.angle;
-    ghostMaxMomentumValue.value = maxState.resultingMomentum;
-    ghostMaxTurnSwitch.value = maxState.turnSwitch;
-}
-
-function clearAttackCostPreview() {
-    console.log("Clearing pendulum preview.");
-    hoveredAttackId.value = null;
-    hoveredAttackCost.value = null;
-}
-
-// Helper computed styles for ghosts (Unchanged)
-const ghostMinStyle = computed(() => ({ transform: `rotate(${ghostMinAngle.value}deg)` }));
-const ghostMaxStyle = computed(() => ({ transform: `rotate(${ghostMaxAngle.value}deg)` }));
-
-// Display value for main pendulum (Uses displayed state via computed)
-const currentTurnMomentum = computed(() => {
-     if (!displayedBattleState.value || !displayedBattleState.value.whose_turn) return 0;
-     return displayedBattleState.value.whose_turn === 'player1' ? currentMomentumP1.value : currentMomentumP2.value;
-});
-
-// --- END Pendulum Logic ---
 
 // --- Methods ---
 async function fetchBattleData() {
@@ -275,9 +155,10 @@ async function fetchBattleData() {
 }
 
 // NEW: Handler for desktop grid click
-function handleGridAttackClick(attackId) {
-    if (!submittingAction.value && canAct.value && attackId) {
-        submitAction(attackId);
+function handleGridAttackClick(attack) {
+    if (!submittingAction.value && canAct.value && attack?.id) {
+        // console.log("Grid click, submitting:", attack.id);
+        submitAction(attack.id);
     }
 }
 
@@ -365,7 +246,7 @@ onMounted(async () => {
   displayedLogEntries.value = gameStore.activeBattle?.last_turn_summary ? [...gameStore.activeBattle.last_turn_summary] : [];
   
   if (displayedBattleState.value?.status === 'active') {
-       startPolling();
+           startPolling();
   }
 });
 
@@ -401,156 +282,101 @@ watch(() => battle.value, (newBattleState) => {
 </script>
 
 <template>
-  <div class="battle-view-container">
+  <div class="battle-screen">
     <div v-if="isLoading && !displayedBattleState" class="loading-message">
       <p>Loading Battle...</p>
     </div>
     <div v-else-if="battleError && !displayedBattleState" class="error-container">
        <p class="error-message">Error: {{ battleError }}</p>
-       <router-link :to="{ name: 'home' }" class="button button-secondary">Return Home</router-link>
+       <router-link :to="{ name: 'home' }" class="btn">Return Home</router-link>
     </div>
-    <div v-else-if="displayedBattleState" class="battle-interface">
+    <div v-else-if="displayedBattleState">
 
-      <!-- NEW: Header with Status and Concede -->
-      <div class="battle-header">
-          <p class="battle-status">Status: <span :class="`status-${displayedBattleState.status}`">{{ displayedBattleState.status }}</span></p>
+      <!-- Header -->
+      <header class="battle-header panel">
+          <h1>BATTLE ZONE</h1>
+          <div class="battle-status">STATUS: <span :class="`status-${displayedBattleState.status}`">{{ displayedBattleState.status.toUpperCase() }}</span></div>
           <button 
             v-if="displayedBattleState.status === 'active'" 
             @click="handleConcede"
             :disabled="isConceding || submittingAction"
-            class="button concede-button-header"
+            class="btn btn-concede"
           >
-            {{ isConceding ? 'Conceding...' : 'Concede' }}
+            {{ isConceding ? '...' : 'CONCEDE' }}
           </button>
-      </div>
+      </header>
 
-      <!-- NEW: Top Row Container -->
-      <div class="battle-top-row">
-          <!-- Opponent Info -->
+      <!-- Main Display Area -->
+      <div class="main-display">
+          <!-- Opponent Info Panel -->
           <PlayerInfoCard
               :player="opponentPlayer"
               :currentHp="opponentCurrentHp"
+              :maxHp="opponentPlayer?.hp" 
               :statStages="opponentStatStages"
               :customStatuses="opponentCustomStatuses"
               playerType="opponent"
-              class="opponent-card"
+              class="player-info opponent panel"
           />
 
-          <!-- Momentum Pendulum -->
-          <div class="momentum-pendulum-container">
-              <div class="pendulum-pivot"></div>
-              <div class="pendulum-center-line"></div> 
-               <!-- Ghost Pendulum (Max Cost) -->
-               <div v-if="hoveredAttackCost" class="pendulum-arm ghost" :style="ghostMaxStyle" :class="ghostMaxTurnSwitch ? (pendulumSide === 'user' ? 'opponent' : 'user') : pendulumSide">
-                  <div class="pendulum-weight ghost-weight">
-                     <span class="momentum-value">{{ Math.round(ghostMaxMomentumValue) }}</span>
+          <!-- Momentum Display Panel -->
+          <div class="momentum-display panel">
+              <div class="momentum-label">MOMENTUM</div>
+              <div class="momentum-meter">
+                 <!-- Display user's momentum fill -->
+                 <div class="momentum-fill user-momentum" :style="userMomentumStyle">
+                    <span class="momentum-value">{{ userPlayerRole === 'player1' ? currentMomentumP1 : currentMomentumP2 }}</span> 
                  </div>
               </div>
-              <!-- Ghost Pendulum (Min Cost) -->
-               <div v-if="hoveredAttackCost" class="pendulum-arm ghost" :style="ghostMinStyle" :class="ghostMinTurnSwitch ? (pendulumSide === 'user' ? 'opponent' : 'user') : pendulumSide">
-                  <div class="pendulum-weight ghost-weight">
-                     <span class="momentum-value">{{ Math.round(ghostMinMomentumValue) }}</span>
-                  </div>
-              </div>
-              <!-- Main Pendulum Arm -->
-              <div class="pendulum-arm" :style="pendulumStyle" :class="pendulumSide">
-                  <div class="pendulum-weight">
-                      <span class="momentum-value">{{ Math.round(currentTurnMomentum) }}</span>
-                  </div>
-              </div>
-              <div class="pendulum-base"></div>
-              <!-- Labels are removed for cleaner mobile look, info is in player cards -->
           </div>
 
-          <!-- User Info -->
+          <!-- User Info Panel -->
            <PlayerInfoCard
                 :player="userPlayer"
                 :currentHp="userCurrentHp"
+                :maxHp="userPlayer?.hp"
                 :statStages="userStatStages"
                 :customStatuses="userCustomStatuses"
                 playerType="user"
                 :isCurrentUser="true"
-                class="user-card"
+                class="player-info user panel"
             />
-      </div> <!-- End Top Row Container -->
-      
-       <!-- NEW: Bottom Area Container -->
-      <div class="battle-bottom-area">
-          <!-- Battle Log -->
-           <div class="battle-log-area">
-               <BattleLog
-                   :logEntries="displayedLogEntries"
-                   :userPlayerRole="userPlayerRole"
-                   :battleId="battleId"
-               />
-           </div>
+      </div>
 
-            <!-- Action Area (Responsive) -->
-            <div class="action-area-container">
-               <!-- Desktop Action Area (Attack Grid) -->
-               <div class="action-display-desktop">
-                    <div v-if="displayedBattleState.status === 'active' && userPlayer" class="desktop-action-selection">
-                        <h3>Choose your Attack:</h3>
-                        <AttackGrid 
-                           v-if="canAct && mySelectedAttacks.length > 0" 
-                           :attacks="mySelectedAttacks" 
-                           mode="select"
-                           :isSubmitting="submittingAction" 
-                           @update:selectedIds="handleGridAttackClick($event[0])"
-                           class="battle-attack-grid"
-                           @attackHover="previewAttackCost"
-                           @attackHoverEnd="clearAttackCostPreview"
-                        />
-                        <div v-else-if="!canAct" class="waiting-message">Waiting for opponent...</div>
-                        <div v-else class="waiting-message">No attacks available?</div>
-                    </div>
-                    <div v-else class="desktop-action-placeholder">
-                         <!-- Placeholder for non-active state on desktop -->
-                    </div>
-               </div>
+      <!-- Bottom Panels Area -->
+      <div class="bottom-panels">
+          <!-- Battle Log Panel -->
+          <div class="battle-log panel">
+              <div class="panel-title">BATTLE LOG</div>
+              <BattleLog
+                :logEntries="displayedLogEntries"
+                :userPlayerRole="userPlayerRole"
+                :player1Name="displayedBattleState.player1.username"
+                :player2Name="displayedBattleState.player2.username"
+                :battleId="displayedBattleState.id"
+              />
+          </div>
 
-               <!-- Mobile Action Area (Preview + Emojis) -->
-               <div class="action-display-mobile">
-                    <!-- Attack Preview Area -->
-                   <div class="attack-preview-area" :class="{ 'visible': selectedAttackPreview }">
-                        <AttackCardDisplay 
-                           v-if="selectedAttackPreview"
-                           :attack="selectedAttackPreview" 
-                           :isClickable="canAct && !submittingAction"
-                           @click="handlePreviewCardClick"
-                           class="preview-card"
-                           :disabled="!canAct || submittingAction"
-                        />
-                        <div v-else class="preview-placeholder">
-                            <span v-if="canAct">Tap an emoji below to preview attack</span>
-                            <span v-else>Waiting for opponent...</span>
-                        </div>
-                   </div>
-                    <!-- Emoji Action Bar -->
-                   <div class="emoji-action-bar" v-if="displayedBattleState.status === 'active'">
-                       <button 
-                           v-for="attack in mySelectedAttacks" 
-                           :key="attack.key" 
-                           @click="handleEmojiClick(attack)"
-                           @mouseenter="previewAttackCost(attack)" 
-                           @mouseleave="clearAttackCostPreview"
-                           :disabled="!canAct || submittingAction"
-                           class="emoji-button"
-                           :class="{ 
-                               'selected': selectedAttackPreview?.id === attack.id,
-                               'hovered': hoveredAttackId === attack.id
-                           }"
-                           :title="`${attack.name} (Cost: ${attack.calculated_min_cost ?? '?'} - ${attack.calculated_max_cost ?? '?'})`" 
-                        >
-                           {{ attack.emoji }}
-                       </button>
-                   </div>
-                   <div v-else class="action-bar-placeholder">
-                       <!-- Placeholder for non-active state on mobile -->
-                   </div>
+          <!-- Action Select Panel -->
+          <div class="action-select panel">
+               <div class="panel-title">CHOOSE ACTION</div>
+               <div v-if="displayedBattleState.status === 'active' && userPlayer">
+                   <AttackGrid
+                      v-if="canAct && mySelectedAttacks.length > 0"
+                      :attacks="mySelectedAttacks"
+                      :isSubmitting="submittingAction"
+                      @attackClick="handleGridAttackClick"
+                      class="action-grid"
+                   />
+                   <div v-else-if="!canAct" class="waiting-message">WAITING...</div>
+                   <div v-else class="waiting-message">NO ATTACKS?</div>
                </div>
-           </div>
-      </div> <!-- End Bottom Area Container -->
+               <div v-else class="action-placeholder">
+                    <!-- Placeholder for non-active state -->
+                    <p>...</p>
+               </div>
+          </div>
+      </div>
 
        <!-- Finished State Overlay -->
        <div v-if="displayedBattleState.status === 'finished'" class="battle-finished-overlay">
@@ -558,360 +384,340 @@ watch(() => battle.value, (newBattleState) => {
           <p v-if="displayedBattleState.winner?.id === currentUser?.id" class="win-message">🎉 You won! 🎉</p>
           <p v-else-if="displayedBattleState.winner" class="lose-message">😢 {{ displayedBattleState.winner.username }} won! 😢</p>
           <p v-else class="draw-message">The battle ended unexpectedly.</p>
-          <router-link :to="{ name: 'home' }" class="button button-secondary return-home-button">Return Home</router-link>
+          <router-link :to="{ name: 'home' }" class="btn return-home-button">Return Home</router-link>
        </div>
 
     </div>
     <div v-else class="loading-message">
         <p>Could not load battle information.</p>
-         <router-link :to="{ name: 'home' }" class="button button-secondary">Return Home</router-link>
+         <router-link :to="{ name: 'home' }" class="btn">Return Home</router-link>
     </div>
   </div>
 </template>
 
 
 <style scoped>
-.battle-view-container {
-  display: flex;
-  flex-direction: column;
-  height: 100vh; /* Full viewport height */
-  width: 100%;
-  overflow: hidden; /* Prevent scrolling of the main container */
-  background-color: var(--color-background-soft);
-  position: relative; /* For overlay positioning */
-}
+/* Import font if not global - better in index.html or main.css */
+/* @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap'); */
 
-.loading-message, .error-container {
+/* Apply base variables */
+.battle-screen {
+    max-width: 1000px;
+    margin: 10px auto; /* Reduced margin */
+    padding: 10px;
     display: flex;
     flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    height: 100%;
-    padding: 2rem;
+    gap: var(--element-gap);
+}
+
+.panel {
+    background-color: var(--color-panel-bg);
+    border: var(--border-width) solid var(--color-border);
+    padding: var(--panel-padding);
+    box-shadow: inset 0 0 0 2px var(--color-bg), 3px 3px 0px var(--color-border); /* Inner border + outer pixel shadow */
+    border-radius: 0; /* Ensure no radius */
+}
+
+.panel-title {
+    font-size: 1.2em; 
+    color: var(--color-accent-secondary);
+    margin: -10px -10px 10px -10px; /* Adjust margins to stretch */
+    padding: 5px 10px; /* Adjust padding */
     text-align: center;
+    border-bottom: var(--border-width) solid var(--color-border);
+    text-transform: uppercase;
+    background-color: var(--color-border); /* Title background */
+    color: var(--color-text); /* Title text color */
+    box-shadow: inset 0 0 0 1px var(--color-panel-bg); /* Inner highlight */
 }
 
-.battle-interface {
-    flex-grow: 1; /* Allow interface to take up remaining space */
-    display: flex;
-    flex-direction: column;
-    padding: 0.5rem; /* Reduced padding */
-    overflow: hidden; /* Prevent internal scrolling unless specified */
-    gap: 0.5rem; /* Space between main sections */
-}
-
-/* Player cards positioning */
-.opponent-card {
-    /* Positioned at the top */
-    flex-shrink: 0; /* Prevent shrinking */
-}
-
-.user-card {
-    /* Positioned above log/preview */
-     flex-shrink: 0; /* Prevent shrinking */
-}
-
-/* Pendulum */
-.momentum-pendulum-container {
-    position: relative;
-    height: 80px; /* Reduced height */
-    margin: 0.5rem auto; /* Reduced margin */
-    width: 150px; /* Reduced width */
-    flex-shrink: 0; /* Prevent shrinking */
-}
-
-.pendulum-pivot { top: 0; left: 50%; transform: translateX(-50%); width: 8px; height: 8px; background-color: var(--color-border-hover); border-radius: 50%; z-index: 3; position: absolute; }
-.pendulum-center-line { position: absolute; top: 8px; bottom: 15px; left: 50%; transform: translateX(-50%); border-left: 1px dotted var(--color-border-hover); width: 0; z-index: 0; }
-.pendulum-arm { position: absolute; bottom: 15px; left: 50%; width: 3px; height: 60px; background-color: var(--color-text-mute); border-radius: 1.5px; transform-origin: top center; transition: transform 0.5s cubic-bezier(0.68, -0.55, 0.27, 1.55); z-index: 2; }
-.pendulum-arm.user { background-color: var(--vt-c-blue); }
-.pendulum-arm.opponent { background-color: var(--vt-c-red); }
-.pendulum-weight { position: absolute; bottom: -7px; left: 50%; transform: translateX(-50%); width: 16px; height: 16px; background-color: inherit; border-radius: 50%; border: 2px solid var(--color-background-soft); display: flex; justify-content: center; align-items: center; }
-.momentum-value { color: white; font-size: 0.6em; font-weight: bold; text-shadow: 0 0 1px black; }
-.pendulum-arm.ghost { opacity: 0.3; z-index: 1; background-color: grey; transition: transform 0.3s ease-out; }
-.pendulum-arm.ghost.user { background-color: var(--vt-c-blue-light); }
-.pendulum-arm.ghost.opponent { background-color: var(--vt-c-red-light); }
-.pendulum-weight.ghost-weight { border-color: transparent; background-color: inherit; width: 14px; height: 14px; border-radius: 50%; border: none; }
-.ghost-weight .momentum-value { opacity: 0.8; }
-.pendulum-base { position: absolute; bottom: 0; left: 0; right: 0; height: 15px; background: linear-gradient(to right, var(--vt-c-blue-soft), var(--color-background-mute), var(--vt-c-red-soft)); border-radius: 3px; border: 1px solid var(--color-border); z-index: 0; }
-/* Removed labels */
-
-/* Battle Log Area */
-.battle-log-area {
-    flex-grow: 1; /* Takes up available space */
-    overflow-y: auto; /* Allow vertical scrolling */
-    border: 1px solid var(--color-border);
-    border-radius: 4px; /* Less rounding */
-    background-color: var(--color-background);
-    padding: 0.5rem;
-    margin-bottom: 0.5rem; /* Space before preview */
-    min-height: 0; /* Crucial for flexbox scrolling children */
-}
-
-/* Attack Preview Area */
-.attack-preview-area {
-    height: 140px; /* Fixed height for the preview card */
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    margin-bottom: 0.5rem; /* Space before emoji bar */
-    flex-shrink: 0; /* Prevent shrinking */
-    transition: opacity 0.3s ease;
-    opacity: 1; /* Always visible, content changes */
-}
-
-.attack-preview-area .preview-placeholder {
-    color: var(--color-text-mute);
-    font-style: italic;
+.btn {
+    font-family: var(--font-primary);
     font-size: 0.9em;
-    text-align: center;
-}
-
-.attack-preview-area .preview-card {
-   max-width: 300px; /* Limit width */
-   width: 90%;
-   height: 100%; /* Fill the container height */
-   cursor: pointer;
-   transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-.attack-preview-area .preview-card:hover:not(.disabled) {
-    transform: scale(1.03);
-    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-}
-.attack-preview-area .preview-card.disabled {
-    cursor: not-allowed;
-    opacity: 0.6;
-}
-
-
-/* Emoji Action Bar */
-.emoji-action-bar {
-    display: flex;
-    justify-content: space-around;
-    align-items: center;
-    padding: 0.5rem 0.2rem;
-    background-color: var(--color-background-mute);
-    border-top: 1px solid var(--color-border);
-    flex-shrink: 0; /* Prevent shrinking */
-}
-
-.emoji-button {
-    font-size: 1.8rem; /* Larger emojis */
-    background: none;
-    border: 2px solid transparent; /* Border for selection/hover */
-    border-radius: 8px; /* Slightly more rounding for buttons */
+    padding: 8px 12px;
+    border: var(--border-width) solid var(--color-border);
+    background-color: var(--color-accent-secondary);
+    color: var(--color-panel-bg);
     cursor: pointer;
-    padding: 0.3rem;
-    line-height: 1;
-    transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.1s ease;
+    text-align: center;
+    transition: background-color 0.2s ease, color 0.2s ease, transform 0.1s ease;
+    box-shadow: 2px 2px 0px var(--color-border); /* Pixel shadow */
+    text-transform: uppercase;
+}
+
+.btn:hover {
+    background-color: var(--color-text);
+    color: var(--color-bg);
+}
+
+.btn:active {
+    transform: translate(1px, 1px);
+    box-shadow: 1px 1px 0px var(--color-border);
+}
+
+.btn:disabled {
+    background-color: var(--color-border); 
+    color: #555; 
+    cursor: not-allowed;
+    opacity: 0.7;
+    box-shadow: 1px 1px 0px #000; 
+    transform: none;
+}
+
+.btn-concede {
+    background-color: var(--color-accent);
+    color: var(--color-text);
+}
+.btn-concede:hover:not(:disabled) {
+    background-color: #c0392b; /* Darker red */
+    color: var(--color-text);
+}
+
+/* --- Layout Specific --- */
+.battle-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 5px var(--panel-padding); /* Reduced padding */
+    margin-bottom: 0; /* Remove bottom margin if needed */
+}
+
+.battle-header h1 {
+    font-size: 1.4em;
+    color: var(--color-accent);
+    margin: 0;
+}
+
+.battle-status {
+    font-size: 1em;
+}
+
+.battle-status .status-active {
+    color: var(--color-hp-high);
+    font-weight: bold; 
+}
+.battle-status .status-finished { color: var(--color-log-system); }
+/* Add other status colors if needed */
+
+.main-display {
+    display: flex;
+    justify-content: space-between;
+    align-items: stretch; 
+    gap: calc(var(--element-gap) * 2); 
+    margin-top: var(--element-gap); /* Add margin above */
+    margin-bottom: var(--element-gap); /* Add margin below */
+}
+
+.player-info {
+    flex: 1 1 30%; /* Allow shrinking/growing */
+    min-width: 200px; /* Prevent extreme squishing */
+}
+
+.momentum-display {
+    flex: 1 1 25%; 
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    justify-content: center; 
+    min-width: 150px;
+    gap: 8px; /* Add gap for spacing */
+}
+
+.momentum-label {
+    font-size: 1em;
+    color: var(--color-text);
+    text-transform: uppercase;
+}
+.momentum-meter {
+    height: 25px; /* Slightly taller bar */
+    background-color: #333;
+    border: 1px solid var(--color-border);
+    position: relative; 
+    overflow: hidden; 
+    padding: 1px; /* Padding for fill */
+    box-shadow: inset 1px 1px 0px rgba(0,0,0,0.5); /* Inner shadow */
+}
+.momentum-fill {
+    position: absolute;
+    top: 1px; /* Position within padding */
+    left: 1px;
+    bottom: 1px;
+    /* height controlled by top/bottom/parent */
+    width: var(--momentum-percent, 0%); /* Controlled by inline style */
+    transition: width 0.5s ease-in-out;
+    display: flex;
+    align-items: center;
+    justify-content: center; 
+}
+.momentum-fill.user-momentum {
+    background: var(--color-momentum-user); /* Solid color, remove gradient */
+    color: var(--color-bg); /* Ensure contrast */
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.2); /* Optional highlight */
+}
+.momentum-value {
+    font-size: 0.9em;
+    font-weight: normal; /* No bold for pixel font */
+    mix-blend-mode: difference; /* Keep this for visibility */
+    color: white; /* Ensure visible with mix-blend */
+}
+
+
+.bottom-panels {
+    display: flex;
+    gap: var(--element-gap);
+}
+
+.battle-log,
+.action-select {
+    display: flex; /* Use flex for internal layout */
+    flex-direction: column;
+}
+
+.battle-log {
+    flex: 1; 
+    min-width: 300px;
+}
+
+.action-select {
+    flex-basis: 45%;
+    min-width: 250px;
+}
+
+.action-grid {
+    flex-grow: 1; /* Allow grid to fill space */
+    overflow-y: auto; /* Scroll if needed */
+    margin-top: 5px;
+}
+
+.waiting-message,
+.action-placeholder p {
+    flex-grow: 1;
     display: flex;
     justify-content: center;
     align-items: center;
-    width: 45px; /* Fixed size */
-    height: 45px;
+    color: var(--color-log-system);
+    font-style: italic;
+    font-size: 1em;
+    text-transform: uppercase;
 }
 
-.emoji-button:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-    background-color: transparent !important; /* Ensure disabled look */
-}
-
-.emoji-button:not(:disabled):hover,
-.emoji-button.hovered:not(:disabled) { /* Style for mouse hover */
-    background-color: var(--color-background-soft);
-    border-color: var(--color-border-hover);
-    transform: scale(1.1);
-}
-
-.emoji-button.selected:not(:disabled) { /* Style for click selection */
-    background-color: var(--vt-c-indigo-soft);
-    border-color: var(--vt-c-indigo);
-    transform: scale(1.05);
-}
-
-.emoji-button.concede-button {
-    font-size: 1.5rem; /* Slightly smaller for flag */
-    border-color: var(--vt-c-red-soft);
-}
-.emoji-button.concede-button:hover:not(:disabled) {
-     background-color: var(--vt-c-red-soft);
-     border-color: var(--vt-c-red);
-}
-
-
-.action-bar-placeholder {
-    height: 60px; /* Match approx height of emoji bar */
-    flex-shrink: 0;
-}
-
-/* Battle Finished Overlay Styles */
+/* Battle Finished Overlay */
 .battle-finished-overlay {
-  position: absolute; /* Cover the entire view */
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  position: fixed; /* Use fixed to cover whole screen */
+  top: 0; left: 0; right: 0; bottom: 0;
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
   text-align: center;
-  padding: 2rem;
-  background-color: var(--color-background); /* Use solid background color */
-  z-index: 10; /* Ensure it's on top */
+  padding: 20px;
+  background-color: rgba(var(--color-bg-rgb, 26, 26, 46), 0.9); /* Use rgba from variable if available, fallback */
+  z-index: 100; 
+  font-family: var(--font-primary);
+  color: var(--color-text);
 }
-
-.battle-finished-overlay h2 { font-size: 2em; margin-bottom: 1rem; color: var(--color-heading); }
-.battle-finished-overlay p { font-size: 1.2em; margin-bottom: 1.5rem; }
-.battle-finished-overlay .win-message { color: var(--vt-c-green-dark); font-weight: bold; }
-.battle-finished-overlay .lose-message { color: var(--vt-c-red-dark); font-weight: bold; }
-.battle-finished-overlay .draw-message { color: var(--color-text-muted); }
+.battle-finished-overlay h2 {
+    font-size: 2em;
+    margin-bottom: 15px;
+    color: var(--color-accent);
+    text-transform: uppercase;
+}
+.battle-finished-overlay p {
+    font-size: 1.2em;
+    margin-bottom: 20px;
+    line-height: 1.4;
+}
+.battle-finished-overlay .win-message { color: var(--color-hp-high); font-weight: normal; }
+.battle-finished-overlay .lose-message { color: var(--color-accent); font-weight: normal; }
+.battle-finished-overlay .draw-message { color: var(--color-log-system); }
 .return-home-button { 
-    font-size: 1em; 
-    padding: 0.7rem 1.5rem; 
-    /* Inherit button styles */
-    display: inline-block; border: none; border-radius: 4px; cursor: pointer; text-align: center; font-weight: 600; transition: background-color 0.2s ease, opacity 0.2s ease, border-color 0.2s ease; line-height: 1.2; text-decoration: none; background-color: var(--color-background-mute); color: var(--color-text); border: 1px solid var(--color-border-hover); 
-}
-.return-home-button:hover { background-color: var(--color-background-soft); border-color: var(--color-text-mute); }
-
-/* --- Responsive Display Toggle for Action Areas --- */
-.action-display-mobile {
-    display: flex; /* Use flex for internal mobile layout */
-    flex-direction: column;
+    font-size: 1.1em;
+    padding: 10px 20px;
 }
 
-.action-display-desktop {
-    display: none; /* Hidden by default */
-}
+/* --- Remove Old Responsive Styles --- */
+/* @media (min-width: 768px) { ... } */
+/* @media (max-width: 768px) { ... } */
+/* @media (max-width: 480px) { ... } */
 
-@media (min-width: 768px) { /* Or your preferred desktop breakpoint */
-    /* --- Desktop Layout Overrides --- */
-    .battle-interface {
-        /* Revert to default or set specific height if needed */
-        /* height: auto; */ 
-        /* Use Grid for overall desktop layout */
-        display: grid;
-        grid-template-rows: auto 1fr; /* Top row auto height, bottom row takes rest */
-        grid-template-columns: 1fr; /* Single column for rows */
-        gap: 1rem; 
-        padding: 1rem; /* Restore some padding */
-        max-width: 1400px; /* Wider max width for desktop */
-        margin: 1rem auto;
+/* Ensure the new responsive rules are applied if needed */
+@media (max-width: 800px) { /* Adjust breakpoint as needed */
+    .battle-screen {
+        padding: 5px; /* Reduce padding on small screens */
+        gap: 5px;
+        margin: 5px auto;
     }
 
-    .battle-top-row {
-        display: grid;
-        grid-template-columns: 1fr auto 1fr; /* Player | Pendulum | Player */
-        align-items: flex-start; /* Align cards to top */
-        gap: 1rem;
-    }
-
-    .battle-bottom-area {
-        display: grid;
-        grid-template-columns: 1fr 1fr; /* Log | Actions */
-        gap: 1rem;
-        overflow: hidden; /* Prevent overflow issues */
-        min-height: 300px; /* Give bottom area some minimum height */
-    }
-
-    .battle-log-area {
-        /* Already setup for scrolling */
-        min-height: 0; /* Still needed for flex/grid context */
-        max-height: 60vh; /* Limit max height if needed */
-        padding: 0.75rem;
-    }
-
-    .action-area-container {
-        /* Container for the desktop grid */
-        margin-top: 0; /* Reset margin from mobile */
-    }
-
-    /* --- Action Area Display Toggle --- */
-    .action-display-desktop {
-        display: block; /* Show desktop grid */
-        height: 100%; /* Allow grid to fill space */
-        display: flex;
-        flex-direction: column;
-    }
-    .desktop-action-selection {
-        flex-grow: 1; /* Allow grid container to grow */
-        display: flex;
-        flex-direction: column;
-    }
-    .battle-attack-grid {
-         flex-grow: 1; /* Allow grid itself to fill space */
-    }
-
-    .action-display-mobile {
-        display: none; /* Hide mobile controls */
-    }
-
-    /* --- Component Size Adjustments --- */
-    .momentum-pendulum-container {
-         width: 150px; /* Slightly smaller pendulum is fine */
-         height: 100px;
-         margin: 0 auto; /* Center pendulum in its grid cell */
-         align-self: center; /* Vertically center pendulum */
-    }
-    .pendulum-arm { height: 80px; width: 4px; }
-    .pendulum-pivot { width: 10px; height: 10px; }
-    .pendulum-center-line { top: 10px; bottom: 20px; }
-    .pendulum-base { height: 20px; }
-    .pendulum-weight { width: 20px; height: 20px; }
-    .pendulum-weight.ghost-weight { width: 18px; height: 18px; }
-    .momentum-value { font-size: 0.7em; }
-    
-    .desktop-action-selection h3 {
-        margin-bottom: 0.8rem;
+    .battle-header {
+        flex-direction: column; /* Stack header items */
+        gap: 5px;
         text-align: center;
+        padding: 8px; 
+    }
+    .battle-header h1 {
+        font-size: 1.2em;
+    }
+    .battle-header .btn-concede {
+        font-size: 0.8em;
+        padding: 6px 10px;
     }
 
-    /* Ensure player cards don't stretch excessively */
-    .opponent-card, .user-card {
-        max-width: 400px; /* Limit card width */
-        margin: 0 auto; /* Center cards in their grid areas */
+    .main-display {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 5px;
+    }
+    
+    /* Ensure player info cards take full width when stacked */
+    .player-info {
+        flex-basis: auto; 
+        min-width: initial; /* Remove min-width */
     }
 
-}
+    .momentum-display {
+        flex-basis: auto;
+        min-width: initial;
+        order: -1; /* Move momentum display up visually */
+        padding: 10px;
+    }
 
-/* NEW: Battle Header Styles */
-.battle-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 0.2rem 0.5rem; /* Minimal padding */
-    margin-bottom: 0.5rem;
-    flex-shrink: 0;
-}
+     .bottom-panels {
+        flex-direction: column;
+        gap: 5px;
+        min-height: initial; /* Remove fixed min-height */
+    }
+    
+    .battle-log, .action-select {
+        flex-basis: auto;
+        min-width: initial; 
+    }
 
-.battle-status {
-    font-weight: bold;
-    margin: 0;
-}
-.status-active { color: var(--vt-c-green); }
-.status-pending { color: var(--vt-c-yellow); }
-.status-finished { color: var(--color-text-mute); }
-.status-declined { color: var(--vt-c-red); }
+    .battle-log {
+        /* Maybe limit height and allow scroll */
+        max-height: 300px; 
+        min-height: 150px;
+        padding: 5px;
+    }
+    .action-select {
+        min-height: 200px; /* Ensure action area has some height */
+        padding: 5px;
+    }
 
-.concede-button-header {
-    padding: 0.4rem 0.8rem;
-    font-size: 0.85em;
-    /* Inherit general button styles */
-    background-color: var(--vt-c-red-soft);
-    color: var(--vt-c-red-dark);
-    border: 1px solid var(--vt-c-red);
-    border-radius: 4px;
-}
+    .action-grid {
+         grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); /* Smaller min size */
+         gap: 5px;
+    }
+    
+    .panel {
+        padding: 10px;
+    }
 
-.concede-button-header:hover:not(:disabled) {
-    background-color: var(--vt-c-red);
-    color: var(--vt-c-white);
-}
+    .panel-title {
+        font-size: 1em;
+    }
 
-.concede-button-header:disabled {
-     opacity: 0.6;
-     cursor: not-allowed;
+    .battle-finished-overlay h2 { font-size: 1.8em; }
+    .battle-finished-overlay p { font-size: 1em; }
 }
-/* --- END Battle Header Styles --- */
 
 </style> 

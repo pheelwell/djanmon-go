@@ -206,250 +206,177 @@ onMounted(async () => {
 
 <style scoped>
 .attack-creator-view {
-  max-width: 700px; /* Adjust width */
-  margin: 2rem auto;
-  padding: 2rem;
-  text-align: center; /* Center align content */
+  /* Use panel styles already applied in HomeView */
+  max-width: 700px; 
+  margin: 1rem auto; /* Adjust margin */
+  padding: var(--panel-padding); /* Use theme padding */
+  text-align: center; 
+  font-family: var(--font-primary);
 }
 
 .booster-header {
-  margin-bottom: 2rem;
-  padding-bottom: 1rem;
-  border-bottom: 1px solid #444; /* Separator */
+  margin: -15px -15px 15px -15px; /* Adjust to match panel-title */
+  padding: 8px 15px;
+  border-bottom: var(--border-width) solid var(--color-border);
+  background-color: var(--color-border); 
+  color: var(--color-text);
+  box-shadow: inset 0 0 0 1px var(--color-panel-bg);
 }
 
 .booster-header h2 {
-  margin-bottom: 0.5rem;
-  font-size: 1.8em;
+  margin: 0;
+  font-size: 1.3em;
+  font-weight: normal;
+  text-transform: uppercase;
 }
 
 .attack-generation-form {
   display: flex;
   flex-direction: column;
-  align-items: center; /* Center form elements */
-  gap: 1.5rem;
+  align-items: center; 
+  gap: 15px; /* Adjust gap */
 }
 
 .form-group {
   width: 100%;
-  max-width: 500px; /* Limit input width */
-  text-align: left; /* Align label/input left */
+  max-width: 500px; 
+  text-align: left; 
 }
 
 .form-group label {
   display: block;
-  margin-bottom: 0.5rem;
-  font-weight: bold;
+  margin-bottom: 5px;
+  font-weight: normal; /* Pixel font usually doesn't need bold */
+  font-size: 0.9em;
+  color: var(--color-text);
+  text-transform: uppercase;
 }
 
-.form-group input[type="text"] {
-  width: 100%;
-  padding: 0.8rem 1rem;
+/* Assuming input styles are handled globally in main.css */
+.form-group input[type="text"],
+.search-input {
+    /* Styles should come from main.css */
 }
 
 .char-counter {
   display: block;
-  margin-top: 0.3rem;
-  font-size: 0.85em;
-  color: #aaa;
+  margin-top: 3px;
+  font-size: 0.8em;
+  color: var(--color-log-system);
   text-align: right;
 }
 
 .char-counter.limit-reached {
-  color: var(--danger-color);
-  font-weight: bold;
+  color: var(--color-accent);
 }
 
+/* Button should use global .btn styles */
 .open-booster-button {
-  padding: 1rem 2rem; /* Larger padding */
-  font-size: 1.2em; /* Larger font */
-  font-weight: bold;
-  background: linear-gradient(145deg, var(--primary-color-light), var(--primary-color-dark)); /* Gradient */
-  border: none;
-  color: white;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-  display: inline-flex; /* Align icon and text */
+  /* font-size: 1.2em; Maybe adjust base btn */
+  /* padding: 1rem 2rem; */
+  display: inline-flex; 
   align-items: center;
-  gap: 0.5rem;
-  min-width: 200px; /* Ensure decent width */
+  gap: 8px;
   justify-content: center;
-}
-
-.open-booster-button:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 10px rgba(0, 255, 157, 0.3);
-}
-
-.open-booster-button:active:not(:disabled) {
-  transform: translateY(0);
-  box-shadow: 0 2px 5px rgba(0, 255, 157, 0.2);
 }
 
 .open-booster-button.disabled-look {
-  background: #555; /* Darker grey when disabled */
-  cursor: not-allowed;
-  opacity: 0.6;
-  box-shadow: none;
-  transform: none;
+    /* Global :disabled styles should handle this */
 }
 
 .button-icon {
-  font-size: 1.3em;
+  font-size: 1.1em; /* Adjust relative to button font size */
 }
 
-.small-text {
-    font-size: 0.9em;
-}
-
-/* Styles for the preview grid (similar to MovesetManager) */
-.preview-grid {
-  display: grid;
-  gap: 1rem;
-  padding: 1rem 0; /* Adjust padding */
-  /* Let auto-fit handle columns */
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); 
-}
-
-.attack-card-wrapper {
-  background-color: var(--color-background);
-  border: 1px solid var(--color-border-hover);
-  border-radius: 8px;
-  padding: 0.8rem; /* Keep padding */
-  height: 200px; /* Adjusted fixed height */
-  width: 100%; /* Ensure it fills grid cell width */
-  display: flex; 
-  flex-direction: column; 
-  justify-content: center; 
-  align-items: center; 
-  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
-  overflow: hidden; /* Prevent content from spilling out */
-  perspective: 1000px; /* Add perspective for 3D flip */
-}
-
-/* RE-ADD: Styles for face-down card */
-.attack-card-face-down {
-  width: 100%;
-  height: 100%;
-  background-color: var(--color-background-mute);
-  border: 2px dashed var(--color-border-hover);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  color: var(--color-text-muted);
-  font-size: 0.9em;
-  font-style: italic;
-  cursor: pointer;
-  transition: background-color 0.2s;
-  border-radius: 6px; /* Keep radius */
-  box-sizing: border-box; 
-}
-
-.attack-card-face-down:hover {
-  background-color: var(--color-background-soft);
-}
-
-.reveal-prompt {
-  /* Optional: specific styling */
-}
-
-/* RE-ADD: Flip Transition Styles */
-.flip-enter-active,
-.flip-leave-active {
-  transition: transform 0.6s ease;
-  backface-visibility: hidden; /* Hide back during flip */
-}
-
-.flip-enter-from,
-.flip-leave-to {
-  transform: rotateY(90deg);
-}
-
-.flip-enter-to,
-.flip-leave-from {
-  transform: rotateY(0deg);
-}
-
-/* Keep Generated Attacks Preview styles */
+/* Preview Section */
 .generated-attacks-preview {
-    margin-top: 3rem;
+    margin-top: 20px;
     text-align: left;
+    width: 100%;
+    border-top: var(--border-width) dashed var(--color-border);
+    padding-top: 15px;
+}
+
+.generated-attacks-preview h3 {
+    text-align: center;
+    font-size: 1.1em;
+    color: var(--color-accent-secondary);
+    margin-bottom: 10px;
+    text-transform: uppercase;
 }
 
 .preview-footer {
-    margin-top: 1.5rem;
+    margin-top: 10px;
     text-align: center;
     font-style: italic;
-    color: #aaa;
+    color: var(--color-log-system);
+    font-size: 0.9em;
 }
 
-/* Styles for Favorite Attack Selection */
+/* Favorite Section */
 .favorite-attacks-section {
-  margin-top: 1rem;
-  padding-top: 1rem;
-  border-top: 1px solid #444;
+  margin-top: 15px;
+  padding-top: 15px;
+  border-top: var(--border-width) dashed var(--color-border);
   width: 100%;
+  text-align: left; /* Ensure label is left-aligned */
 }
 
-/* Ensure full-width section is centered like the form */
-.favorite-attacks-section.full-width {
-  margin: 1.5rem auto 0 auto; /* Keep centering and margin top */
-}
-
-/* Styles for Search Bar (similar to MovesetManager) */
 .search-bar-container {
-  margin-bottom: 0.5rem; /* Space below search bar */
+  margin-bottom: 8px; 
 }
 
-.search-input {
-  width: 100%;
-  padding: 0.6rem 1rem;
-  border-radius: 6px;
-  border: 1px solid var(--color-border-hover);
-  background-color: var(--color-background);
-  color: var(--color-text);
-  font-size: 0.95rem;
-}
-
-.search-input:focus {
-  outline: none;
-  border-color: var(--primary-color);
-  box-shadow: 0 0 0 2px var(--primary-color-translucent); 
-}
-
-/* Style the AttackGrid component specifically for favorites if needed */
 .favorite-attack-selector {
-  /* Specific styles for the AttackGrid container in this view */
-  border: 1px solid var(--color-border-hover);
-  border-radius: 8px;
-  padding: 0.5rem;
-  margin-top: 0.5rem;
+  /* Remove border/padding, let AttackGrid handle internal padding */
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  margin-top: 5px;
 }
 
-
-/* Keep counter style */
 .selection-counter {
   display: block;
-  margin-top: 0.5rem;
-  font-size: 0.9em;
-  color: #aaa;
+  margin-top: 5px;
+  font-size: 0.85em;
+  color: var(--color-log-system);
   text-align: right;
 }
-/* End Styles for Favorite Attack Selection */
 
-/* --- Responsive Display Toggle for Attacks --- */
-.attack-display-mobile {
-    display: none; /* Hidden by default */
+/* Responsive Toggle */
+.attack-display-mobile { display: none; }
+@media (max-width: 768px) { 
+    .attack-display-desktop { display: none; }
+    .attack-display-mobile { display: block; }
 }
 
-@media (max-width: 768px) { /* Or your preferred mobile breakpoint */
-    .attack-display-desktop {
-        display: none; /* Hide grid on mobile */
-    }
-    .attack-display-mobile {
-        display: block; /* Show list on mobile */
-    }
+/* Loading and Feedback Messages */
+.loading-placeholder, .error-message, .success-message {
+    /* Assume styles from HomeView apply or copy/adapt them */
+    padding: 8px 10px;
+    border-radius: 0;
+    font-weight: normal;
+    text-align: center;
+    margin-bottom: 10px; 
+    border: 1px solid;
+    font-size: 0.9em;
+}
+.loading-placeholder {
+    color: var(--color-log-system);
+    font-style: italic;
+    border-style: dashed;
+    border-color: var(--color-border);
+    background-color: var(--color-bg);
+    text-transform: uppercase;
+}
+.error-message {
+  background-color: rgba(233, 69, 96, 0.1);
+  color: var(--color-accent);
+  border-color: var(--color-accent);
+}
+.success-message {
+  background-color: rgba(53, 208, 104, 0.1);
+  color: var(--color-hp-high);
+  border-color: var(--color-hp-high);
 }
 
 </style> 

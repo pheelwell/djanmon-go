@@ -80,16 +80,17 @@ Feel free to reuse or build upon concepts or custom statuses from these attacks 
     - `details` (Lua table, optional): Extra data for frontend display based on `effect_type`. For `action`, provide `attack_name` and `emoji`.
     - **Purpose:** Provide clear feedback to players about what happened. Debug logs help developers trace script execution.
     - **Standard Phrasing:** Use consistent phrasing for common events:
-        - Damage: `[Target Name] took X damage.` effect_type = 'damage'
+        - Damage: `[Target Name] took X damage.` <-- This is now logged AUTOMATICALLY by apply_std_damage.
         - Heal: `[Target Name] recovered Y HP.` effect_type = 'heal'
         - Stat Raised: `[Target Name]'s [Stat] was raised!` or `[Target Name]'s [Stat] rose to +Z!` effect_type = 'stat_change'
         - Stat Lowered: `[Target Name]'s [Stat] was lowered!` or `[Target Name]'s [Stat] fell to -Z!` effect_type = 'stat_change'
         - Status Applied: `[Target Name] is now [Status Name]!` (maybe add duration/stacks) effect_type = 'status_apply'
         - Status Removed: `[Target Name] is no longer [Status Name].` effect_type = 'status_remove'
         - Status Effect Trigger: `[Target Name] took X damage from [Status Name].` effect_type = 'status_effect'
+    - **IMPORTANT (Damage Logging):** Do NOT manually log the specific damage amount dealt by `apply_std_damage` using this function (e.g., `log(target .. ' took ' .. dmg .. ' damage')`). The `apply_std_damage` function now logs the actual calculated damage automatically. You can still log *that* damage occurred or the *reason* for damage (e.g., status effect trigger), just not the calculated numerical value from Lua.
 
 ### Effect Functions:
-- `apply_std_damage(base_power, target_role)`: Applies standard damage calculation (uses stats, stages, variance). Returns damage dealt.
+- `apply_std_damage(base_power, target_role)`: Applies standard damage calculation (uses stats, stages, variance). Returns damage dealt. **Automatically logs the damage dealt.**
 - `apply_std_hp_change(hp_change, target_role)`: Directly adds/subtracts HP (positive=heal). **IMPORTANT:** Calculate heals based on MAX HP (e.g., `math.floor(get_max_hp(TARGET_ROLE) * 0.2)`). Avoid fixed heal amounts.
 - `apply_std_stat_change(stat_name, stage_change, target_role)`: Modifies 'attack', 'defense', or 'speed' stages (-6 to +6).
 
@@ -150,6 +151,7 @@ Attacks should be designed to potentially work well together synergistically.{fa
 - **Log Effects:** Clearly log the results of API calls (damage dealt, healing done, stats changed, statuses applied/removed/triggered) using appropriate `effect_type` and standard phrasing (see API docs).
 - **Player Feedback:** Use `source='script'` (or attacker/target role if appropriate) and appropriate `effect_type` (e.g., 'damage', 'status_apply', 'info') for actions the player should see clearly.
 - **Debugging:** Use `source='debug'` and `effect_type='debug'` for explaining *how* calculations are done or *why* conditions are met/not met. These logs will be less visible.
+- **Damage Log Exception:** Do NOT log the specific numerical damage amount after calling `apply_std_damage`. The Python function handles logging the final calculated damage.
 
 ## --- End Critical Rules --- 
 
@@ -203,8 +205,8 @@ if has_custom_status(SCRIPT_TARGET_ROLE, 'Poisoned') then
   local max_hp = get_max_hp(SCRIPT_TARGET_ROLE)
   local dmg = math.floor(max_hp * 0.05) -- Damage 5% max HP
   log('Calculating poison damage: 5% of ' .. max_hp .. ' = ' .. dmg, 'debug', 'debug')
-  apply_std_hp_change(-dmg, SCRIPT_TARGET_ROLE)
-  log(get_player_name(SCRIPT_TARGET_ROLE) .. ' took ' .. dmg .. ' poison damage.', 'status_effect', 'script')
+  apply_std_hp_change(-dmg, SCRIPT_TARGET_ROLE) -- Use HP change for DOTs, which logs itself if needed
+  log(get_player_name(SCRIPT_TARGET_ROLE) .. ' is hurt by poison.', 'status_effect', 'script') -- Generic status effect log
   
   if duration <= 1 then
       log('Poison duration ended.', 'debug', 'debug')
@@ -222,7 +224,6 @@ else
   unregister_script(CURRENT_REGISTRATION_ID)
 end
 
--- (Include other examples, potentially adding debug logs to them as well)
 -- Example 5: Stat stage interaction
 local attacker_atk_stage = get_stat_stage(ATTACKER_ROLE, 'attack')
 log('Checking attacker ATK stage: ' .. attacker_atk_stage, 'debug', 'debug')
@@ -307,7 +308,7 @@ local effect_choice = math.random(1, 3)
 log('Random effect roll: ' .. effect_choice, 'debug', 'debug')
 if effect_choice == 1 then
     apply_std_damage(45, TARGET_ROLE)
-    log('Random damage applied!', 'info', 'script')
+    log('Random damage effect triggered!', 'info', 'script') -- Log *that* it happened
 elsif effect_choice == 2 then
     apply_std_stat_change('speed', -1, TARGET_ROLE)
     log('Random speed debuff applied!', 'stat_change', 'script')
@@ -379,7 +380,7 @@ local base_damage = 30
 local bonus_damage = math.floor(base_damage * total_stages * 0.20) -- +20% base damage per absolute stage difference
 log('Base damage: ' .. base_damage .. ', Bonus damage: ' .. bonus_damage, 'debug', 'debug')
 apply_std_damage(base_damage + bonus_damage, TARGET_ROLE)
-log('Damage amplified by ' .. bonus_damage .. ' due to stat changes!', 'info', 'script')
+log('Damage amplified due to stat changes!', 'info', 'script') -- Log the *reason*, not the amount
 
 
 ## Handling Malicious or Cheating Prompts:

@@ -266,175 +266,195 @@ function handleLogout() {
 </template>
 
 <style scoped>
-/* Remove grid layout, use flex column layout */
+/* Apply base font */
 .home-view {
   display: flex; 
   flex-direction: column;
-  gap: 1.5rem; /* Space between nav and content */
-  padding: 1rem; /* Adjusted padding */
-  max-width: 900px; /* Adjust max-width as needed */
-  margin: 1rem auto;
+  gap: 1rem; /* Keep gap, use theme var if defined or pixel value */
+  padding: 10px; /* Use pixel padding */
+  max-width: 900px; 
+  margin: 10px auto;
+  font-family: var(--font-primary);
 }
 
-/* Remove old grid media query */
-@media (min-width: 1200px) {
-  .home-view {
-    max-width: 1000px; /* Maybe slightly wider on large screens */
-  }
-}
+/* Remove old grid media query if not needed */
+/* @media (min-width: 1200px) { ... } */
 
-/* Style for the section navigation (similar to App nav) */
+/* Style for the section navigation */
 .section-nav {
   display: flex;
   justify-content: center;
-  gap: 0.5rem; /* Keep some gap */
-  margin-bottom: 1rem; /* Space below nav */
-  flex-wrap: wrap; /* Allow buttons to wrap on small screens */
-  border-bottom: 1px solid var(--color-border); /* Add bottom border */
-  padding-bottom: 1rem; /* Add padding below buttons */
+  gap: 8px; 
+  margin-bottom: 10px; 
+  flex-wrap: wrap; 
+  border-bottom: var(--border-width) solid var(--color-border);
+  padding-bottom: 10px; 
 }
 
 .section-nav button {
-  padding: 0 1rem; /* Match horizontal padding */
-  background-color: transparent; /* No background */
-  border: none; /* No border */
-  cursor: pointer;
-  font-size: 1rem; /* Match font size */
-  color: var(--color-text); /* Use default text color */
-  opacity: 0.7; /* Slightly faded non-active */
-  transition: opacity 0.2s ease;
-  font-weight: normal; /* Reset font weight */
+  /* Inherit .btn styles from main.css? Or define here? */
+  /* Assuming inheritance or global .btn style matching theme */
+  background-color: transparent;
+  border: 2px solid transparent; /* Border for spacing, transparent */
+  color: var(--color-text);
+  opacity: 0.7; 
+  transition: opacity 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+  padding: 4px 8px; /* Adjust padding */
+  font-size: 0.9em; /* Adjust size */
+  text-transform: uppercase;
+  box-shadow: none; /* Remove base btn shadow */
 }
 
 .section-nav button:hover:not(:disabled) {
-  opacity: 1; /* Full opacity on hover */
-  background-color: transparent; /* Ensure no background on hover */
+  opacity: 1;
+  color: var(--color-accent-secondary);
+  background-color: transparent; /* No bg change on hover */
 }
 
 .section-nav button.active {
-  font-weight: bold; /* Bold active link */
-  color: var(--color-text); /* Ensure active uses main text color */
-  opacity: 1; /* Full opacity */
+  opacity: 1; 
+  color: var(--color-accent-secondary);
+  border-bottom-color: var(--color-accent-secondary); /* Underline effect */
 }
 
 .section-nav button:disabled {
-   opacity: 0.4; /* Dim disabled buttons more */
+   opacity: 0.4;
    cursor: not-allowed;
 }
 
 /* Container for the active section */
 .section-content {
-  /* Ensure it can grow */
   flex-grow: 1;
-  /* Give children panels consistent styling if they don't have it */
-  & > .panel { /* Target direct children with .panel class */
-     margin-bottom: 1rem; /* Add some space below if multiple panels could show (though v-if prevents this now) */
+  & > .panel {
+     margin-bottom: 10px; 
   }
 }
 
-.panel { /* Keep general panel styles */
-    background-color: var(--color-background-soft);
-    padding: 1.5rem;
-    border-radius: 8px;
-    border: 1px solid var(--color-border);
-    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+/* Retro Panel Style Override (Applies to panels created directly in HomeView or if needed for children) */
+.panel {
+    background-color: var(--color-panel-bg);
+    border: var(--border-width) solid var(--color-border);
+    padding: var(--panel-padding);
+    box-shadow: inset 0 0 0 2px var(--color-bg), 3px 3px 0px var(--color-border);
+    border-radius: 0;
+    margin-bottom: var(--element-gap); /* Consistent spacing */
 }
 
 .actions-panel {
     display: flex;
     flex-direction: column;
-    gap: 1.5rem; /* Space between title, feedback, and content */
+    gap: 1rem; /* Keep gap */
 }
 
-.actions-panel h2 {
-    margin-top: 0; /* Added to reset */
-    margin-bottom: 0; /* Reduce default bottom margin */
+.actions-panel h2 { /* Assuming titles exist in children */
+    /* Delegate title styling to child components or apply .panel-title style if needed */
+    margin-top: 0;
+    margin-bottom: 0;
 }
 
 .action-feedback {
-     margin-bottom: 0; /* Remove extra bottom margin */
-     order: -1; /* Keep feedback at top */
+     /* Feedback messages styling */
+     margin-bottom: 0;
+     order: -1;
 }
 
-.error-message, .success-message { /* Basic styling for feedback messages */
-    padding: 0.8rem 1rem;
-    border-radius: 6px;
-    font-weight: 500;
+.error-message, .success-message { 
+    padding: 8px 10px;
+    border-radius: 0;
+    font-weight: normal;
     text-align: center;
-    margin-bottom: 1rem; /* Space below message if present */
+    margin-bottom: 10px; 
+    border: 1px solid;
+    font-size: 0.9em;
 }
 .error-message {
-  background-color: var(--vt-c-red-soft);
-  color: var(--vt-c-red-dark);
-  border: 1px solid var(--vt-c-red);
+  background-color: rgba(233, 69, 96, 0.1); /* Use theme colors */
+  color: var(--color-accent);
+  border-color: var(--color-accent);
 }
 .success-message {
-  background-color: var(--vt-c-green-soft);
-  color: var(--vt-c-green-dark);
-  border: 1px solid var(--vt-c-green);
+  background-color: rgba(53, 208, 104, 0.1);
+  color: var(--color-hp-high);
+  border-color: var(--color-hp-high);
 }
 
 /* Generic Loading Placeholder style */
 .loading-placeholder {
-    padding: 1.5rem;
+    padding: 20px;
     text-align: center;
-    color: var(--color-text-mute);
+    color: var(--color-log-system);
     font-style: italic;
-    border-radius: 8px;
+    border-radius: 0;
     border: 1px dashed var(--color-border);
-    /* margin-top: 1rem; Removed */
+    background-color: var(--color-bg); /* Match inner bg */
+    text-transform: uppercase;
 }
 
 .no-active-battle-layout {
     display: flex;
     flex-direction: column;
-    gap: 1.5rem; /* Space between challenges and players */
+    gap: 1rem; 
 }
 
-/* Base button styles (ensure these exist or copy from other components if needed) */
-.button {
-    display: inline-block;
-    border: none;
-    padding: 0.75rem 1.5rem;
-    border-radius: 4px;
-    cursor: pointer;
-    text-align: center;
-    font-weight: 600;
-    transition: background-color 0.2s ease, opacity 0.2s ease;
-    line-height: 1.2;
-}
-.button:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-}
+/* --- Button Styles (Ensure consistency with global styles) --- */
+/* Assuming .button class exists globally and matches theme */
 
-/* Danger button style */
+/* Danger button style override if needed */
 .button-danger {
-  background-color: var(--vt-c-red); /* Use CSS variable for red */
-  color: white;
-  border: 1px solid var(--vt-c-red-dark); /* Optional darker border */
+  background-color: var(--color-accent); /* Use theme accent */
+  color: var(--color-text); /* Ensure contrast */
+  border-color: var(--color-border);
 }
 
 .button-danger:hover:not(:disabled) {
-  background-color: var(--vt-c-red-dark); /* Darken on hover */
-  border-color: var(--vt-c-red-darker); /* Even darker border on hover */
+  background-color: #c0392b; /* Darker red */
+  border-color: var(--color-border);
+  color: var(--color-text);
 }
 
 /* Keep fixed logout button style */
 .logout-button-fixed {
     position: fixed;
-    top: 1.5rem; /* Adjust spacing from top */
-    right: 1.5rem; /* Adjust spacing from right */
-    z-index: 1000; /* Ensure it stays on top */
+    top: 10px; /* Adjust spacing */
+    right: 10px; 
+    z-index: 1000; 
+    /* Apply btn styles directly or use class */
+    font-family: var(--font-primary);
+    font-size: 0.8em;
+    padding: 6px 10px;
+    border: var(--border-width) solid var(--color-border);
+    background-color: var(--color-accent);
+    color: var(--color-text);
+    cursor: pointer;
+    text-align: center;
+    transition: background-color 0.2s ease, color 0.2s ease, transform 0.1s ease;
+    box-shadow: 2px 2px 0px var(--color-border);
+    text-transform: uppercase;
+    border-radius: 0;
+}
+.logout-button-fixed:hover {
+    background-color: #c0392b; /* Darker red */
+}
+.logout-button-fixed:active {
+    transform: translate(1px, 1px);
+    box-shadow: 1px 1px 0px var(--color-border);
 }
 
 /* Adjust logout button padding on very small screens */
 @media (max-width: 480px) {
   .logout-button-fixed {
-    top: 0.8rem;
-    right: 0.8rem;
-    padding: 0.6rem 1rem; /* Slightly smaller button */
+    top: 5px;
+    right: 5px;
+    padding: 4px 8px;
   }
+}
+
+/* Ensure child components inherit font */
+.moveset-manager-panel,
+.actions-panel,
+.leaderboard-view,
+.attack-creator-view {
+    font-family: var(--font-primary);
 }
 
 </style>

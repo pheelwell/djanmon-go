@@ -27,66 +27,77 @@ const nemesisDisplay = computed(() => {
 </script>
 
 <template>
-  <div v-if="isLoading" class="loading">Loading stats...</div>
-  <div v-else-if="stats" class="my-stats-grid"> 
-      <p>Wins: {{ stats.total_wins ?? 'N/A' }}</p>
-      <p>Losses: {{ stats.total_losses ?? 'N/A' }}</p>
-      <p>Rounds Played: {{ stats.total_rounds_played ?? 'N/A' }}</p>
-      <p>Nemesis: {{ nemesisDisplay }}</p>
-      <!-- Add other stats here as needed -->
+  <div v-if="isLoading" class="loading-placeholder">Loading your stats...</div>
+  <div v-else-if="stats" class="my-stats-container">
+      <h3>Your Stats</h3>
+      <div class="my-stats-grid"> 
+          <p>Wins: <span>{{ stats.total_wins ?? 'N/A' }}</span></p>
+          <p>Losses: <span>{{ stats.total_losses ?? 'N/A' }}</span></p>
+          <p>Rounds Played: <span>{{ stats.total_rounds_played ?? 'N/A' }}</span></p>
+          <p>Nemesis: <span>{{ nemesisDisplay }}</span></p>
+      </div>
   </div>
   <div v-else class="no-stats-message">
-    No stats available.
+    No stats available yet.
   </div>
 </template>
 
 <style scoped>
-/* Styles adapted from LeaderboardView.vue */
-.my-stats {
-  background-color: var(--color-background-soft);
-  padding: 1.5rem 2rem;
-  border-radius: 8px;
-  margin-bottom: 2.5rem;
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.08);
-  border-left: 5px solid var(--color-border-hover);
+.my-stats-container {
+  background-color: var(--color-panel-bg); /* Match panel */
+  padding: 10px;
+  border-radius: 0;
+  border: 1px solid var(--color-border); /* Subtler border */
+  box-shadow: inset 0 0 0 1px var(--color-bg); /* Inner shadow like panel */
+  font-family: var(--font-primary);
 }
 
-.my-stats h2 {
-  margin-top: 0;
-  margin-bottom: 1.5rem;
-  color: var(--color-heading);
-  text-align: left;
-  border-bottom: 1px solid var(--color-border);
-  padding-bottom: 0.8rem;
+.my-stats-container h3 {
+    font-size: 1.1em; 
+    color: var(--color-accent-secondary);
+    margin: 0 0 10px 0;
+    padding-bottom: 5px;
+    text-align: center;
+    border-bottom: 1px dashed var(--color-border);
+    text-transform: uppercase;
+    font-weight: normal;
 }
 
-.loading,
+.loading-placeholder,
 .no-stats-message {
   text-align: center;
-  padding: 1rem;
-  color: var(--color-text-muted);
+  padding: 10px;
+  color: var(--color-log-system);
   font-style: italic;
+  font-size: 0.9em;
+  border: 1px dashed var(--color-border);
+  background-color: var(--color-bg);
+  text-transform: uppercase;
+  font-family: var(--font-primary);
 }
 
 .my-stats-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-    gap: 1rem;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 8px;
 }
 
-.my-stats p {
+.my-stats-grid p {
   margin: 0;
-  line-height: 1.6;
-  background-color: var(--color-background-mute);
-  padding: 0.8rem 1rem;
-  border-radius: 4px;
+  line-height: 1.3;
+  background-color: var(--color-bg); /* Darker bg for stat items */
+  padding: 5px 8px;
+  border: 1px solid var(--color-border);
+  font-size: 0.9em;
+  display: flex; /* Use flex to align text */
+  justify-content: space-between;
 }
 
-.my-stats strong {
-    color: var(--color-text);
-    display: block;
-    margin-bottom: 0.25rem;
-    font-size: 0.9em;
-    color: var(--color-text-muted);
+.my-stats-grid p span {
+    font-weight: bold; /* Make value bold */
+    color: var(--color-text); 
 }
+
+/* Remove old .my-stats styles */
+
 </style> 
