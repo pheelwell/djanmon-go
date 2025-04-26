@@ -192,6 +192,33 @@ function handleLogout() {
 // Need MAX_SELECTED for tutorial text
 const MAX_SELECTED = 6; 
 
+// Re-add goToBattle function
+function goToBattle(battleId) {
+    router.push({ name: 'battle', params: { id: battleId } });
+}
+
+// Re-add handleChallenge function
+async function handleChallenge(challengeData) {
+    const { opponentId, fightAsBot } = challengeData;
+    challengingUserId.value = opponentId;
+    const result = await gameStore.challengeUser(opponentId, fightAsBot);
+    challengingUserId.value = null;
+
+    if (result && result.battleStarted && result.battle) {
+      goToBattle(result.battle.id);
+    }
+}
+
+// Re-add handleResponse function (was removed accidentally in previous steps)
+async function handleResponse(battleId, responseAction) {
+    respondingBattleId.value = battleId;
+    const result = await gameStore.respondToBattle(battleId, responseAction);
+    respondingBattleId.value = null;
+    if (result.accepted && result.battle) {
+        goToBattle(result.battle.id);
+    }
+}
+
 </script>
 
 <template>
@@ -305,6 +332,7 @@ const MAX_SELECTED = 6;
                  :players="availableUsers"
                  :challengingUserId="challengingUserId"
                  @challenge="handleChallenge"
+                 @respond="handleResponse"
              />
          </div>
          <!-- === END === -->
