@@ -140,6 +140,7 @@ function clearTutorialPreview() {
 // --- END Tutorial Interaction Handlers ---
 
 onMounted(() => {
+  console.log("[HomeView onMounted] Fetching initial data...");
   gameStore.fetchUsers();
   gameStore.fetchPendingBattles();
   gameStore.fetchActiveBattle();
@@ -183,30 +184,6 @@ function setActiveSection(sectionName) {
   activeSection.value = sectionName;
 }
 
-async function handleChallenge(challengeData) {
-    const { opponentId, fightAsBot } = challengeData;
-    challengingUserId.value = opponentId;
-    const result = await gameStore.challengeUser(opponentId, fightAsBot);
-    challengingUserId.value = null;
-
-    if (result && result.battleStarted && result.battle) {
-      goToBattle(result.battle.id);
-    }
-}
-
-async function handleResponse(battleId, responseAction) {
-    respondingBattleId.value = battleId;
-    const result = await gameStore.respondToBattle(battleId, responseAction);
-    respondingBattleId.value = null;
-    if (result.accepted && result.battle) {
-        goToBattle(result.battle.id);
-    }
-}
-
-function goToBattle(battleId) {
-    router.push({ name: 'battle', params: { id: battleId } });
-}
-
 function handleLogout() {
     authStore.logout();
     router.push({ name: 'login' });
@@ -232,6 +209,7 @@ const MAX_SELECTED = 6;
     <nav class="section-nav">
       <!-- Combined Profile/Moveset -->
       <button 
+        id="nav-profile"
         @click="setActiveSection('profile')"
         :class="{ 'active': activeSection === 'profile' }"
         :disabled="!user"
@@ -241,6 +219,7 @@ const MAX_SELECTED = 6;
       </button>
       <!-- Attack Creator -->
       <button 
+        id="nav-creator"
         @click="setActiveSection('attack-creator')"
         :class="{ 'active': activeSection === 'attack-creator' }"
         title="Attack Creator"
@@ -249,6 +228,7 @@ const MAX_SELECTED = 6;
       </button>
       <!-- Battle (Formerly Command Center) -->
       <button 
+        id="nav-battle"
         @click="setActiveSection('battle')" 
         :class="{ 'active': activeSection === 'battle' }"
         :disabled="!user"
@@ -258,6 +238,7 @@ const MAX_SELECTED = 6;
       </button>
       <!-- Tutorial -->
       <button 
+        id="nav-tutorial"
         @click="setActiveSection('tutorial')" 
         :class="{ 'active': activeSection === 'tutorial' }"
         title="Tutorial"
@@ -266,6 +247,7 @@ const MAX_SELECTED = 6;
       </button>
       <!-- Leaderboard -->
        <button 
+        id="nav-leaderboard"
         @click="setActiveSection('leaderboard')"
         :class="{ 'active': activeSection === 'leaderboard' }"
         title="Leaderboard"
@@ -506,6 +488,7 @@ const MAX_SELECTED = 6;
 <style scoped>
 /* Apply base font */
 .home-view {
+  position: relative; /* REMOVE THIS if not needed elsewhere */
   display: flex; 
   flex-direction: column;
   gap: 1rem; /* Keep gap, use theme var if defined or pixel value */
