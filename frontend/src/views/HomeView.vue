@@ -34,7 +34,7 @@ const isLoadingActiveBattle = computed(() => gameStore.isLoadingActiveBattle);
 const actionError = computed(() => gameStore.actionError);
 const actionSuccessMessage = computed(() => gameStore.actionSuccessMessage);
 
-const activeSection = ref('command'); // State for active tab, default to command center
+const activeSection = ref('profile'); // Default to combined profile/moveset view
 
 const challengingUserId = ref(null);
 const respondingBattleId = ref(null);
@@ -212,6 +212,9 @@ function handleLogout() {
     router.push({ name: 'login' });
 }
 
+// Need MAX_SELECTED for tutorial text
+const MAX_SELECTED = 6; 
+
 </script>
 
 <template>
@@ -227,77 +230,79 @@ function handleLogout() {
   <main class="home-view">
     <!-- Section Navigation -->
     <nav class="section-nav">
+      <!-- Combined Profile/Moveset -->
       <button 
         @click="setActiveSection('profile')"
         :class="{ 'active': activeSection === 'profile' }"
         :disabled="!user"
+        title="Profile & Moveset"
       >
-        Profile
+        👤 Profile
       </button>
+      <!-- Attack Creator -->
       <button 
-        @click="setActiveSection('moveset')"
-        :class="{ 'active': activeSection === 'moveset' }"
-        :disabled="!user"
+        @click="setActiveSection('attack-creator')"
+        :class="{ 'active': activeSection === 'attack-creator' }"
+        title="Attack Creator"
       >
-        Moveset
+        ✨ Creator
       </button>
+      <!-- Battle (Formerly Command Center) -->
       <button 
-        @click="setActiveSection('command')"
-        :class="{ 'active': activeSection === 'command' }"
+        @click="setActiveSection('battle')" 
+        :class="{ 'active': activeSection === 'battle' }"
         :disabled="!user"
+        title="Battle Hub"
       >
-        Command Center
+        ⚔️ Battle
       </button>
+      <!-- Tutorial -->
       <button 
         @click="setActiveSection('tutorial')" 
         :class="{ 'active': activeSection === 'tutorial' }"
+        title="Tutorial"
       >
-        Tutorial
+        ❓ Tutorial
       </button>
+      <!-- Leaderboard -->
        <button 
         @click="setActiveSection('leaderboard')"
         :class="{ 'active': activeSection === 'leaderboard' }"
+        title="Leaderboard"
       >
-        Leaderboard
-      </button>
-       <button 
-        @click="setActiveSection('attack-creator')"
-        :class="{ 'active': activeSection === 'attack-creator' }"
-      >
-        Attack Creator
+        🏆 Leaderboard
       </button>
     </nav>
 
     <!-- Conditionally Displayed Sections -->
     <div class="section-content">
-      <!-- UserProfilePanel or loading state -->
+      <!-- Combined Profile/Moveset Section -->
       <template v-if="activeSection === 'profile'">
-        <UserProfilePanel :key="'profile-panel'" v-if="user" :user="user" />
+        <div v-if="user" class="profile-moveset-container">
+             <UserProfilePanel :key="'profile-panel'" :user="user" />
+             <div :key="'moveset-panel'" class="moveset-manager-panel panel">
+                <MovesetManager />
+             </div>
+        </div>
         <div :key="'profile-loading'" v-else class="panel">
           <p>Loading user profile...</p>
         </div>
       </template>
 
-      <!-- Integrated Moveset Manager -->
-      <div :key="'moveset-panel'" v-if="activeSection === 'moveset' && user" class="moveset-manager-panel panel">
-        <MovesetManager />
-      </div>
+      <!-- Attack Creator View -->
+      <AttackCreatorView :key="'attack-creator-view'" v-if="activeSection === 'attack-creator'" class="panel" />
 
-      <!-- Actions Panel (Command Center) -->
-      <div :key="'command-panel'" v-if="activeSection === 'command' && user" class="actions-panel panel">
+      <!-- Battle Panel (Formerly Command Center) -->
+      <div :key="'battle-panel'" v-if="activeSection === 'battle' && user" class="actions-panel panel">
          <!-- Action Feedback -->
          <div class="action-feedback">
             <p v-if="actionError" class="error-message">⚠️ {{ actionError }}</p>
             <p v-if="actionSuccessMessage" class="success-message">✅ {{ actionSuccessMessage }}</p>
          </div>
-
-         <!-- === UPDATED COMMAND CENTER Structure === -->
-
-         <!-- 1. Loading state for active battle check -->
+         <!-- 1. Loading state -->
          <div v-if="isLoadingActiveBattle" class="loading-placeholder">
              Checking battle status...
          </div>
-         
          <!-- 2. Active Battle Display -->
          <ActiveBattleDisplay
              v-else-if="activeBattle && opponent" 
@@ -305,34 +310,54 @@ function handleLogout() {
              :opponent="opponent"
              @goToBattle="goToBattle"
          />
-
-         <!-- 3. If NO active battle AND NOT loading, show Challenges & Player List -->
+         <!-- 3. If NO active battle -->
          <div v-else class="no-active-battle-layout"> 
-
-             <!-- Incoming Challenges Section - Use Component -->
              <IncomingChallengesList
                  :isLoading="isLoadingPendingBattles"
                  :battles="pendingBattles"
                  :respondingBattleId="respondingBattleId"
                  @respond="handleResponse"
              />
-
-             <!-- Available Players Section - Use Component -->
              <AvailablePlayersList
                  :isLoading="isLoadingUsers"
                  :players="availableUsers"
                  :challengingUserId="challengingUserId"
                  @challenge="handleChallenge"
              />
-
          </div>
-         <!-- === END UPDATED COMMAND CENTER === -->
-
+         <!-- === END === -->
       </div>
 
-      <!-- UPDATED: Tutorial Section -->
+      <!-- Tutorial Section -->
       <div :key="'tutorial-panel'" v-if="activeSection === 'tutorial'" class="tutorial-panel panel">
         <h2>Game Tutorial</h2>
+        <!-- Getting Started Section -->
+        <section class="tutorial-section getting-started">
+            <h3>Getting Started</h3>
+            <p>Welcome to GENGO! Here's the basic flow to get battling:</p>
+            <ul>
+                <li>
+                    <strong>1. Create Attacks:</strong> Head over to the 
+                    <button class="inline-link" @click="setActiveSection('attack-creator')">✨ Creator</button> 
+                    tab...
+                </li>
+                <li>
+                    <strong>2. Setup Character:</strong> Go to the 
+                    <button class="inline-link" @click="setActiveSection('profile')">👤 Profile</button> 
+                    tab. Here you allocate Stat Points and select your Moveset (drag up to {{ MAX_SELECTED }} attacks).
+                </li>
+                 <li>
+                    <strong>3. Find a Fight:</strong> Visit the 
+                    <button class="inline-link" @click="setActiveSection('battle')">⚔️ Battle</button> 
+                    hub...
+                </li>
+            </ul>
+             <p>Once a battle starts, use your selected attacks and manage your Momentum to defeat your opponent. Good luck!</p>
+        </section>
+
+        <!-- END: Getting Started Section -->
+
+        <!-- **** ADDING MISSING CONTENT BELOW **** -->
 
         <section class="tutorial-section">
           <h3>Core Stats & Statuses</h3>
@@ -372,10 +397,8 @@ function handleLogout() {
                     class="momentum-fill user-momentum fill-left" 
                     :style="{ width: tutorialSampleMomentum + '%' }"
                  >
-                    <!-- Number positioned absolutely within the fill -->
                     <span class="momentum-value">{{ tutorialSampleMomentum }}</span> 
                  </div>
-                 <!-- Cost Preview Block -->
                  <div 
                     :class="['momentum-cost-preview', 'tutorial-preview', { 'active-preview': isTutorialPreviewActive }]" 
                     :style="{
@@ -390,7 +413,6 @@ function handleLogout() {
                    The attack could cost between <strong>{{ tutorialPreviewCostMin }}</strong> and <strong>{{ tutorialPreviewCostMax }}</strong> Momentum.
                  </span>
               </p>
-               <!-- Attack Cards for Preview -->
               <div class="tutorial-attack-preview-area">
                   <div 
                     class="tutorial-attack-card-wrapper"
@@ -471,15 +493,11 @@ function handleLogout() {
             <li>Build a powerful Moveset where your attacks complement each other!</li>
           </ul>
         </section>
-
+        <!-- **** END OF MISSING CONTENT **** -->
       </div>
-      <!-- END Tutorial Section -->
 
       <!-- Leaderboard View -->
       <LeaderboardView :key="'leaderboard-view'" v-if="activeSection === 'leaderboard'" class="panel" />
-
-      <!-- Attack Creator View -->
-      <AttackCreatorView :key="'attack-creator-view'" v-if="activeSection === 'attack-creator'" class="panel" />
 
     </div>
   </main>
@@ -519,10 +537,15 @@ function handleLogout() {
   color: var(--color-text);
   opacity: 0.7; 
   transition: opacity 0.2s ease, border-color 0.2s ease, color 0.2s ease;
-  padding: 4px 8px; /* Adjust padding */
-  font-size: 0.9em; /* Adjust size */
+  padding: 4px 10px; 
+  font-size: 1.1em; /* Increased font size */
   text-transform: uppercase;
   box-shadow: none; /* Remove base btn shadow */
+  /* Add display flex for better alignment */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px; /* Add gap between emoji and text */
 }
 
 .section-nav button:hover:not(:disabled) {
@@ -922,4 +945,49 @@ function handleLogout() {
   color: var(--color-accent-secondary);
 }
 
+/* Style for inline link buttons in tutorial */
+.tutorial-panel .inline-link {
+    /* Base button styles (adapt from .btn or define inline) */
+    font-family: var(--font-primary);
+    font-size: 0.9em; /* Match nav button size */
+    padding: 4px 8px; /* Match nav button padding */
+    border: var(--border-width) solid var(--color-border);
+    background-color: var(--color-accent-secondary); /* Use a distinct color */
+    color: var(--color-panel-bg);
+    cursor: pointer;
+    text-align: center;
+    transition: background-color 0.2s ease, color 0.2s ease, transform 0.1s ease;
+    box-shadow: 2px 2px 0px var(--color-border);
+    text-transform: uppercase;
+    border-radius: 0;
+    /* Adjust vertical alignment to fit better in text */
+    vertical-align: middle;
+    margin: 0 4px; /* Add slight horizontal margin */
+    transform: translateY(-1px); /* Adjust baseline slightly */
+}
+
+.tutorial-panel .inline-link:hover {
+    background-color: var(--color-text); /* Match nav hover */
+    color: var(--color-bg);
+}
+
+.tutorial-panel .inline-link:active {
+    transform: translate(1px, 0px); /* Adjust active state */
+    box-shadow: 1px 1px 0px var(--color-border);
+}
+
+/* --- Responsive Display Toggle --- */
+/* ... rest of styles ... */
+
+/* Style for the combined profile/moveset container */
+.profile-moveset-container {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem; /* Space between profile and moveset panels */
+}
+
+/* Adjust tutorial inline links if needed */
+.tutorial-panel .inline-link {
+    /* Keep existing styles or adjust */
+}
 </style>
