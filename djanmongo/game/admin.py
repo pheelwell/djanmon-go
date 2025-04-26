@@ -126,7 +126,7 @@ class BattleLogErrorFilter(SimpleListFilter):
 class AttackUsageStatsAdmin(ModelAdmin):
     list_display = ('attack_name', 'times_used', 'wins_vs_human', 'losses_vs_human', 'wins_vs_bot', 'losses_vs_bot', 'total_damage_dealt')
     search_fields = ('attack__name',) # Search by related attack name
-    readonly_fields = ('attack',) # Make attack read-only in detail view
+    readonly_fields = () # Make attack read-only in detail view <-- REMOVED 'attack'
     list_filter = ()
     ordering = ('-times_used', 'attack__name')
 
@@ -142,6 +142,21 @@ class AttackUsageStatsAdmin(ModelAdmin):
         # Note: queryset is ignored here as we recalculate ALL stats globally
         try:
             with transaction.atomic():
+                # 0. Ensure stats objects exist for all attacks BEFORE resetting
+                all_attacks = Attack.objects.all()
+                existing_stat_attack_ids = set(AttackUsageStats.objects.values_list('attack_id', flat=True))
+                missing_stats_to_create = []
+                for attack in all_attacks:
+                    if attack.id not in existing_stat_attack_ids:
+                        # Use default= parameter for get_or_create if you have defaults in model
+                        # Otherwise, create manually or ensure defaults are handled by model's save()
+                        missing_stats_to_create.append(AttackUsageStats(attack=attack)) 
+                
+                if missing_stats_to_create:
+                    AttackUsageStats.objects.bulk_create(missing_stats_to_create, ignore_conflicts=True) # Use ignore_conflicts just in case
+                    print(f"[Admin Action] Created {len(missing_stats_to_create)} missing AttackUsageStats records.")
+
+
                 # 1. Reset existing stats - CORRECTED FIELDS
                 num_reset = AttackUsageStats.objects.update(
                     times_used=0, 
@@ -150,10 +165,10 @@ class AttackUsageStatsAdmin(ModelAdmin):
                     wins_vs_bot=0,
                     losses_vs_bot=0,
                     total_damage_dealt=0,
-                    total_healing_done=0,
-                    co_used_with_counts={}
+                    total_healing_done=0, # Make sure this field exists on the model
+                    co_used_with_counts={} # Ensure this uses default={} in the model field
                 )
-                print(f"[Admin Action] Reset {num_reset} AttackUsageStats records.")
+                print(f"[Admin Action] Reset {num_reset} AttackUsageStats records to zero.")
 
                 # 2. Iterate through finished battles and recalculate from logs
                 processed_battles = 0
