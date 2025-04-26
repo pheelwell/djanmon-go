@@ -1,4 +1,5 @@
 import { fileURLToPath, URL } from 'node:url'
+import path from 'path' // Needed for alias
 
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
@@ -9,11 +10,25 @@ import { sentryVitePlugin } from "@sentry/vite-plugin";
 
 // https://vite.dev/config/
 export default defineConfig({
+  // Set the base path for assets to match Django's STATIC_URL
+  base: '/static/',
+
   // alowed hosts
   server: {
     host: true,
     port: 5173,
     allowedHosts: ['lexmark-specialists-leone-legislation.trycloudflare.com'],
+    proxy: {
+      // Proxy requests starting with /api to the Django backend
+      '/api': {
+        target: 'http://localhost:8000/api', // Your Django backend URL
+        changeOrigin: true, // Recommended for virtual hosts
+        secure: false,      // Set to true if your backend uses HTTPS
+        // Rewrite the path: remove /api prefix before forwarding
+        // e.g., /api/users/login -> /users/login
+        rewrite: (path) => path.replace(/^\/api/, '') 
+      }
+    }
   },
   // Enable sourcemaps for Sentry
   build: {
@@ -44,7 +59,7 @@ export default defineConfig({
   ],
   resolve: {
     alias: {
-      '@': fileURLToPath(new URL('./src', import.meta.url))
+      '@': path.resolve(__dirname, './src'), // Setup @ alias for cleaner imports
     },
   },
 })

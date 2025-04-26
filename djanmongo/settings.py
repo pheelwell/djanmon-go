@@ -42,15 +42,19 @@ INSTALLED_APPS = [
     'rest_framework',
     'corsheaders',
     'djangoeditorwidgets', # <-- Add this
+    'whitenoise', # Add whitenoise here too if not already
 
     # Your apps
     'users.apps.UsersConfig',
     'game.apps.GameConfig',
 ]
 MIDDLEWARE = [
-    'corsheaders.middleware.CorsMiddleware', 
+    # SecurityMiddleware should come first or very early
     'django.middleware.security.SecurityMiddleware',
+    # WhiteNoiseMiddleware should come right after SecurityMiddleware
     'whitenoise.middleware.WhiteNoiseMiddleware', 
+    # CORS Middleware should come relatively early, typically before CommonMiddleware
+    'corsheaders.middleware.CorsMiddleware', 
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -65,6 +69,8 @@ ROOT_URLCONF = 'urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
+        # Add the frontend build index.html directory if you need Django templates to see it
+        # 'DIRS': [os.path.join(BASE_DIR, '..', 'frontend_dist')], 
         'DIRS': [],
         'APP_DIRS': True,
         'OPTIONS': {
@@ -165,16 +171,27 @@ CSRF_COOKIE_SAMESITE = 'None'
 # CSRF_COOKIE_DOMAIN = ".example.com"
 # Leave unset if they are completely different domains.
 
+# --- Static files configuration --- 
 STATIC_URL = 'static/'
-# Add this for WhiteNoise if serving static files from Django/Gunicorn
-STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles') 
-# Optional: Add directories searched by collectstatic
+
+# Directory where collectstatic will gather files for deployment
+# Use an absolute path within the container
+STATIC_ROOT = '/app/staticfiles' 
+
+# Directories where Django looks for static files *in addition* to app static/ dirs
 STATICFILES_DIRS = [
-    os.path.join(BASE_DIR, 'static_cdn'), # <-- Add directory for downloaded editors
+    # Use an absolute path within the container for the copied frontend build
+    '/app/frontend_dist',
+    # Keep existing static_cdn directory if needed, using absolute path
+    '/app/djanmongo/static_cdn', 
 ]
 
-# Add this if using WhiteNoise for simplified static file serving on Render
+# Use WhiteNoise storage with compression and caching support
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+
+# Add this setting to tell WhiteNoise to serve the index.html file for unmatched URLs
+# This allows the Vue Router to handle routing on the frontend.
+WHITENOISE_INDEX_FILE = True
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/stable/ref/settings/#default-auto-field

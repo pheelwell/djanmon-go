@@ -1,28 +1,27 @@
 import axios from 'axios';
 
-// Determine the base URL based on the environment
-let baseURL;
+// Remove environment-based logic
+// let baseURL;
+// 
+// if (import.meta.env.VITE_API_BASE_URL) {
+//     baseURL = import.meta.env.VITE_API_BASE_URL;
+//     console.log(`Using VITE_API_BASE_URL: ${baseURL}`);
+// } else if (import.meta.env.DEV) {
+//     baseURL = 'http://localhost:8000/api'; 
+//     console.log(`Using development fallback baseURL: ${baseURL}`);
+// } else {
+//     baseURL = window.location.origin + '/api'; 
+//     console.log(`Using production relative path fallback baseURL: ${baseURL}`);
+// }
 
-if (import.meta.env.VITE_API_BASE_URL) {
-    // 1. Use environment variable if provided (Primary for production)
-    baseURL = import.meta.env.VITE_API_BASE_URL;
-    console.log(`Using VITE_API_BASE_URL: ${baseURL}`);
-} else if (import.meta.env.DEV) {
-    // 2. Fallback for local development (if no env var set)
-    baseURL = 'http://localhost:8000/api'; 
-    console.log(`Using development fallback baseURL: ${baseURL}`);
-} else {
-    // 3. Fallback for production if no env var set (assuming relative path)
-    baseURL = window.location.origin + '/api'; 
-    console.log(`Using production relative path fallback baseURL: ${baseURL}`);
-}
+// Use a relative path for all requests. Vite proxy handles it in dev,
+// production server (nginx, etc.) handles it in deployment.
+const baseURL = '/api'; 
+console.log(`Axios baseURL set to relative path: ${baseURL}`);
 
 const apiClient = axios.create({
   baseURL: baseURL,
-  withCredentials: true, // Keep this for session cookies
-  // headers: { // You might set common headers here if needed
-  //   'Content-Type': 'application/json',
-  // }
+  withCredentials: true, // KEEP THIS for session cookies
 });
 
 // Optional: Add interceptors for things like adding auth tokens to requests

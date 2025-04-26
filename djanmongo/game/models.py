@@ -101,7 +101,6 @@ class AttackUsageStats(models.Model):
         related_name='usage_stats'
     )
     times_used = models.PositiveIntegerField(default=0, db_index=True, help_text="Total times this attack was used in any battle.")
-    # Removed wins_contributed - we'll calculate win rates differently
 
     # --- NEW STAT FIELDS ---
     wins_vs_human = models.PositiveIntegerField(default=0, db_index=True, help_text="Wins in battles vs human opponents where this attack was used by the winner.")
