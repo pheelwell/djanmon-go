@@ -58,11 +58,11 @@ RUN mkdir -p /app/djanmongo/static_cdn
 RUN python djanmongo/manage.py collectstatic --noinput --clear
 
 # Expose the port Gunicorn will run on
-EXPOSE 8000
+EXPOSE 80
 
 # Set the entrypoint script to run migrations and then start the main process
 ENTRYPOINT ["/app/entrypoint.sh"]
 
 # Specify the command to run your application using Gunicorn
 # Ensure djanmongo/wsgi.py exists and is configured
-CMD ["gunicorn", "--pythonpath", "djanmongo", "djanmongo.wsgi:application", "--bind", "0.0.0.0:8000"] 
+CMD ["gunicorn", "--pythonpath", "djanmongo", "djanmongo.wsgi:application", "--bind", "0.0.0.0:80"] 
