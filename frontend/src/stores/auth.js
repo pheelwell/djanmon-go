@@ -239,7 +239,7 @@ export const useAuthStore = defineStore('auth', () => {
            const errorMsg = error.response?.data?.error || error.message || 'Failed to delete attack.';
            // actionError.value = errorMsg; // Set error message if defined
            throw new Error(errorMsg);
-      }
+    }
   }
 
   return {

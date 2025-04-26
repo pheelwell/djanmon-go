@@ -32,6 +32,8 @@ const MOMENTUM_THRESHOLD = 50; // Threshold for pendulum swing based on current 
 
 // NEW: State for the previewed attack card
 const selectedAttackPreview = ref(null); 
+const previewedMinCost = ref(null); // <-- State for preview min
+const previewedMaxCost = ref(null); // <-- State for preview max
 
 // Helper delay function
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -130,21 +132,14 @@ const activeMomentumBarStyle = computed(() => ({
 
 // Class object for the momentum bar fill (user vs opponent color)
 const activeMomentumBarClass = computed(() => {
-    if (!activePlayerRole.value) return 'momentum-fill'; // Default
+    if (!activePlayerRole.value) return ['momentum-fill']; // Default
     const isUserTurn = activePlayerRole.value === userPlayerRole.value;
     return [
         'momentum-fill',
-        isUserTurn ? 'user-momentum' : 'opponent-momentum'
+        isUserTurn ? 'user-momentum' : 'opponent-momentum',
+        isUserTurn ? 'fill-left' : 'fill-right' // <-- Add alignment class
     ];
 });
-
-// --- Old Momentum Computeds (Keep if needed elsewhere, otherwise remove) ---
-/*
-const totalMomentum = computed(() => Math.max(100, currentMomentumP1.value + currentMomentumP2.value)); 
-const userMomentumPercent = computed(() => { ... });
-const userMomentumStyle = computed(() => ({ ... }));
-const opponentMomentumPercent = computed(() => { ... });
-*/
 
 // Available actions now come directly from the displayed battle data
 const mySelectedAttacks = computed(() => {
@@ -153,6 +148,72 @@ const mySelectedAttacks = computed(() => {
         ...attack,
         key: `${attack.id}-${index}` // Simple unique key
     }));
+});
+
+// --- Client-side Stat Calculation Helpers ---
+// Simple stat stage modifier calculation (matches basic backend logic)
+function calculateStatModifier(stage) {
+  stage = clamp(stage, -6, 6);
+  if (stage >= 0) {
+    return (2 + stage) / 2;
+    } else {
+    return 2 / (2 - stage);
+  }
+}
+
+// Client-side version for previewing momentum cost
+// NOTE: This is simplified and might not perfectly match complex backend edge cases
+function calculateMomentumCostClientSide(baseCost, userStats, userStages) {
+    const speedStage = userStages?.speed ?? 0;
+    const speedModifier = calculateStatModifier(speedStage);
+    const effectiveSpeed = Math.max(1, (userStats?.speed ?? 50) * speedModifier); // Assume base 50 if missing
+
+    // Simplified cost calculation based on speed ranges (adjust thresholds as needed)
+    let costMultiplier = 1.0;
+    if (effectiveSpeed >= 100) costMultiplier = 0.75; // Faster = cheaper
+    else if (effectiveSpeed <= 25) costMultiplier = 1.25; // Slower = costlier
+    
+    // Example: Introduce slight randomness or range based on modifier
+    const calculatedCost = Math.round(baseCost * costMultiplier);
+    const minCost = Math.round(calculatedCost * 0.9); // Example: 90% of calculated
+    const maxCost = Math.round(calculatedCost * 1.1); // Example: 110% of calculated
+
+    // Clamp results to sensible bounds (e.g., 0-100)
+    const finalMin = clamp(minCost, 0, 100);
+    const finalMax = clamp(maxCost, 0, 100);
+
+    // Ensure min is not greater than max
+    return [Math.min(finalMin, finalMax), finalMax]; 
+}
+// --- End Client-side Helpers ---
+
+// MODIFY: Computed for preview visibility
+const isPreviewActive = computed(() => 
+    canAct.value && // Only show preview if user can act
+    previewedMinCost.value !== null && 
+    previewedMaxCost.value !== null
+);
+
+// NEW: Computed style for the cost preview block
+const costPreviewStyle = computed(() => {
+  if (!isPreviewActive.value) return {}; // Return empty if not active
+
+  const currentPercent = activePlayerMomentumPercent.value;
+  const minCostPercent = clamp(previewedMinCost.value ?? 0, 0, 100);
+  const maxCostPercent = clamp(previewedMaxCost.value ?? 0, 0, 100);
+
+  // Calculate start and end points of the preview block (remaining momentum)
+  const previewEndPercent = clamp(currentPercent - minCostPercent, 0, currentPercent);
+  const previewStartPercent = clamp(currentPercent - maxCostPercent, 0, currentPercent);
+
+  const calculatedWidth = Math.max(0, previewEndPercent - previewStartPercent); // Ensure width is not negative
+
+   console.log(`[Preview Style] Current: ${currentPercent}, MinCost: ${minCostPercent}, MaxCost: ${maxCostPercent}, Start: ${previewStartPercent}, End: ${previewEndPercent}, Width: ${calculatedWidth}`);
+
+  return {
+    left: `${previewStartPercent}%`,
+    width: `${calculatedWidth}%`
+  };
 });
 
 // --- Methods ---
@@ -170,19 +231,65 @@ async function fetchBattleData() {
     }
 }
 
-// NEW: Handler for desktop grid click
+// NEW: Function to calculate and show preview cost
+function previewAttackCost(attack) {
+    console.log('[Preview] Attack:', JSON.parse(JSON.stringify(attack || {})));
+    if (!attack || !currentUser.value) {
+        console.log('[Preview] No attack or user, clearing.');
+        clearAttackCostPreview();
+        return;
+    }
+    // Use pre-calculated if available (from mobile click data)
+    if (attack.calculated_min_cost !== undefined && attack.calculated_max_cost !== undefined) {
+         previewedMinCost.value = attack.calculated_min_cost;
+         previewedMaxCost.value = attack.calculated_max_cost;
+         console.log(`[Preview] Using pre-calculated: min=${previewedMinCost.value}, max=${previewedMaxCost.value}`);
+    } else {
+         // Calculate client-side (for desktop hover or if data missing)
+         console.log('[Preview] Calculating client-side...');
+         const userStats = {
+            hp: currentUser.value.hp,
+            attack: currentUser.value.attack,
+            defense: currentUser.value.defense,
+            speed: currentUser.value.speed
+         };
+         console.log('[Preview] User Stats:', userStats);
+         console.log('[Preview] User Stages:', JSON.parse(JSON.stringify(userStatStages.value || {})));
+         const [minCost, maxCost] = calculateMomentumCostClientSide(
+             attack.momentum_cost,
+             userStats,
+             userStatStages.value // Use the computed user stages
+         );
+         previewedMinCost.value = minCost;
+         previewedMaxCost.value = maxCost;
+         console.log(`[Preview] Calculated client-side: min=${previewedMinCost.value}, max=${previewedMaxCost.value}`);
+    }
+}
+
+// NEW: Function to clear preview cost
+function clearAttackCostPreview() {
+    console.log('[Preview] Clearing preview costs.'); // Log clearing
+    previewedMinCost.value = null;
+    previewedMaxCost.value = null;
+}
+
+// --- Update Event Handlers ---
+
+// MODIFY: handleGridAttackClick (Desktop Grid Click)
 function handleGridAttackClick(attack) {
+    clearAttackCostPreview(); // Clear preview on click before submitting
     if (!submittingAction.value && canAct.value && attack?.id) {
-        // console.log("Grid click, submitting:", attack.id);
         submitAction(attack.id);
     }
 }
 
+// MODIFY: submitAction
 async function submitAction(attackIdToSubmit) {
     if (!attackIdToSubmit || !displayedBattleState.value || !canAct.value || submittingAction.value) return;
     
     submittingAction.value = true;
-    selectedAttackPreview.value = null; // Clear preview immediately on submission
+    selectedAttackPreview.value = null; 
+    clearAttackCostPreview(); // <-- Clear preview here too
     const initialPlayerRole = userPlayerRole.value; 
     const opponentIsBot = opponentPlayer.value?.is_bot; // Check if opponent is bot (might be null initially)
 
@@ -236,22 +343,23 @@ function stopPolling() {
      }
 }
 
-// --- NEW: Handle Emoji Click ---
+// MODIFY: handleEmojiClick (Mobile Button Click)
 function handleEmojiClick(attack) {
-    if (canAct.value && !submittingAction.value) {
+    if (!submittingAction.value && attack) {
         selectedAttackPreview.value = attack;
-        previewAttackCost(attack); // Show pendulum preview for the selected attack
+        previewAttackCost(attack); // Show preview for the selected attack
     }
 }
 
-// --- NEW: Handle Preview Card Click ---
+// MODIFY: handlePreviewCardClick (Mobile Preview Click)
 function handlePreviewCardClick() {
     if (selectedAttackPreview.value && canAct.value && !submittingAction.value) {
+        // Submit action first, which already clears preview
         submitAction(selectedAttackPreview.value.id);
     } else {
-        // If not clickable (e.g., not user's turn), just clear the preview
+        // If not clickable, just clear the preview
         selectedAttackPreview.value = null;
-        clearAttackCostPreview();
+        clearAttackCostPreview(); // <-- Clear preview here
     }
 }
 
@@ -271,7 +379,7 @@ onUnmounted(() => {
   gameStore.clearMessages();
 });
 
-// --- Watchers (Simplified for now, complex log processing removed temporarily) ---
+// --- Update Watchers --- 
 watch(() => battle.value, (newBattleState) => {
     // Directly update displayed state and logs from the store state
     // This avoids complex incremental processing for now
@@ -287,8 +395,8 @@ watch(() => battle.value, (newBattleState) => {
         startPolling();
     }
     
-    // Clear preview if it's no longer the user's turn
-    if (newBattleState?.whose_turn !== userPlayerRole.value) {
+    // Clear preview if it's no longer the user's turn or preview is active
+    if (newBattleState?.whose_turn !== userPlayerRole.value && isPreviewActive.value) {
         selectedAttackPreview.value = null;
         clearAttackCostPreview();
     }
@@ -340,12 +448,15 @@ watch(() => battle.value, (newBattleState) => {
           <div class="momentum-display panel">
               <div class="momentum-label">MOMENTUM</div>
               <div class="momentum-meter">
+                 <!-- Main Fill Bar -->
                  <div 
                     :class="activeMomentumBarClass" 
                     :style="activeMomentumBarStyle"
                  >
                     <span class="momentum-value">{{ activePlayerMomentumValue }}</span> 
                  </div>
+                 <!-- Cost Preview Block -->
+                 <div v-if="isPreviewActive" class="momentum-cost-preview" :style="costPreviewStyle"></div>
               </div>
           </div>
 
@@ -386,16 +497,21 @@ watch(() => battle.value, (newBattleState) => {
                     <!-- DESKTOP: Existing Attack Grid -->
                     <div class="action-area-desktop">
                         <div v-if="displayedBattleState.status === 'active' && userPlayer">
-                        <AttackGrid 
+                    <AttackGrid 
                                 v-if="mySelectedAttacks.length > 0"
-                            :attacks="mySelectedAttacks" 
+                        :attacks="mySelectedAttacks" 
                                 :disabled="!canAct || submittingAction"
                                 @attackClick="handleGridAttackClick"
                                 class="action-grid"
+                                @mouseover.native="previewAttackCost($event.target.__vueParentComponent.ctx.attack)" 
+                                @mouseleave.native="clearAttackCostPreview"
                             />
+                            <!-- NOTE: Need to enhance AttackGrid or handle hover differently -->
+                            <!-- The above @mouseover/@mouseleave might not work directly on component -->
+                            <!-- Alternative: Add handlers in AttackGrid's #item slot -->
                             <div v-else-if="!canAct && mySelectedAttacks.length === 0" class="waiting-message">WAITING...</div>
                             <div v-else-if="mySelectedAttacks.length === 0" class="waiting-message">NO ATTACKS?</div>
-                    </div>
+                </div>
                         <div v-else class="action-placeholder">
                             <p>...</p>
                         </div>
@@ -403,7 +519,7 @@ watch(() => battle.value, (newBattleState) => {
 
                     <!-- MOBILE: New Action Area -->
                     <div class="action-area-mobile">
-                        <div v-if="displayedBattleState.status === 'active' && userPlayer && canAct">
+                        <div v-if="displayedBattleState.status === 'active' && userPlayer">
                             <!-- Mobile: Single Attack Preview Area -->
                             <div class="mobile-attack-preview" :class="{ 'has-preview': selectedAttackPreview }">
                                 <AttackCardDisplay
@@ -414,7 +530,7 @@ watch(() => battle.value, (newBattleState) => {
                                     :class="{ 'clickable': canAct && !submittingAction }"
                                 />
                                 <div v-else class="preview-placeholder">Select an attack below</div>
-                            </div>
+                </div>
 
                             <!-- Mobile: Emoji Buttons -->
                             <div class="mobile-emoji-buttons" v-if="mySelectedAttacks.length > 0">
@@ -436,18 +552,18 @@ watch(() => battle.value, (newBattleState) => {
                         <div v-else class="action-placeholder">
                             <p>...</p>
                         </div>
-                    </div>
-                </div>
+            </div>
+       </div>
 
                 <!-- Finished State Content (Shown only when finished) -->
                 <div v-if="displayedBattleState.status === 'finished'" class="battle-finished-content">
-                    <p v-if="displayedBattleState.winner?.id === currentUser?.id" class="win-message">🎉 You won! 🎉</p>
-                    <p v-else-if="displayedBattleState.winner" class="lose-message">😢 {{ displayedBattleState.winner.username }} won! 😢</p>
-                    <p v-else class="draw-message">The battle ended unexpectedly.</p>
+          <p v-if="displayedBattleState.winner?.id === currentUser?.id" class="win-message">🎉 You won! 🎉</p>
+          <p v-else-if="displayedBattleState.winner" class="lose-message">😢 {{ displayedBattleState.winner.username }} won! 😢</p>
+          <p v-else class="draw-message">The battle ended unexpectedly.</p>
                     <router-link :to="{ name: 'home' }" class="btn return-home-button">Return Home</router-link>
                 </div>
           </div>
-       </div>
+      </div>
 
     </div>
     <div v-else class="loading-message">
@@ -591,43 +707,64 @@ watch(() => battle.value, (newBattleState) => {
     text-transform: uppercase;
 }
 .momentum-meter {
-    height: 25px; /* Slightly taller bar */
+    height: 25px; 
     background-color: #333;
     border: 1px solid var(--color-border);
-    position: relative; 
+    position: relative; /* Changed from relative */
     overflow: hidden; 
-    padding: 1px; /* Padding for fill */
-    box-shadow: inset 1px 1px 0px rgba(0,0,0,0.5); /* Inner shadow */
+    padding: 1px; 
+    box-shadow: inset 1px 1px 0px rgba(0,0,0,0.5); 
 }
 .momentum-fill {
-    position: absolute;
-    top: 1px; /* Position within padding */
-    left: 1px;
+    position: absolute; /* Changed to absolute */
+    top: 1px;
     bottom: 1px;
-    /* height controlled by top/bottom/parent */
-    width: var(--momentum-percent, 0%); /* Controlled by inline style */
-    transition: width 0.5s ease-in-out;
+    width: var(--momentum-percent, 0%); /* Width set by inline style */
+    transition: width 0.5s ease-in-out, left 0.3s ease, right 0.3s ease; /* Add transitions */
     display: flex;
     align-items: center;
     justify-content: center; 
 }
+/* Alignment classes */
+.momentum-fill.fill-left {
+    left: 1px;
+    right: auto;
+}
+.momentum-fill.fill-right {
+    right: 1px;
+    left: auto;
+}
+/* Color classes (unchanged) */
 .momentum-fill.user-momentum {
-    background: var(--color-momentum-user); /* Solid color */
+    background: var(--color-momentum-user); 
     color: var(--color-bg); 
     box-shadow: inset 0 0 0 1px rgba(255,255,255,0.2);
 }
 .momentum-fill.opponent-momentum {
-    background: var(--color-momentum-opponent); /* Opponent color */
+    background: var(--color-momentum-opponent); 
     color: var(--color-bg); 
     box-shadow: inset 0 0 0 1px rgba(255,255,255,0.2);
 }
 .momentum-value {
     font-size: 0.9em;
-    font-weight: normal; /* No bold for pixel font */
-    mix-blend-mode: difference; /* Keep this for visibility */
-    color: white; /* Ensure visible with mix-blend */
+    font-weight: normal; 
+    color: black;
 }
 
+/* NEW: Cost Preview Block Style */
+.momentum-cost-preview {
+    position: absolute;
+    top: 1px; /* Match fill bar positioning */
+    bottom: 1px;
+    /* left and width are set by inline style */
+    background-color: rgba(255, 255, 0, 0.4); /* Yellowish, more transparent */
+    z-index: 5; /* Below fill bar text (if it has higher z-index), above meter background */
+    transition: left 0.2s ease-out, width 0.2s ease-out; /* Smooth transition */
+    pointer-events: none; 
+    border-left: 1px solid rgba(255, 255, 0, 0.7);
+    border-right: 1px solid rgba(255, 255, 0, 0.7);
+    box-sizing: border-box;
+}
 
 .bottom-panels {
     display: flex;
@@ -707,7 +844,7 @@ watch(() => battle.value, (newBattleState) => {
 @media (max-width: 800px) { 
     /* --- Fullscreen Mobile Layout --- */
     .battle-screen {
-        display: flex;
+    display: flex;
         flex-direction: column;
         height: 100vh; /* Full viewport height */
         /* Consider using 100dvh for better mobile browser handling */
@@ -847,7 +984,7 @@ watch(() => battle.value, (newBattleState) => {
         padding: 15px 0; /* Restore some padding */
         font-size: 1em;
          /* ... other styles ... */
-        text-align: center;
+  text-align: center;
         flex-grow: 1; 
         display: flex;
         justify-content: center;
@@ -929,7 +1066,7 @@ watch(() => battle.value, (newBattleState) => {
 .battle-header.panel,
 .momentum-display.panel {
     background-color: transparent;
-    border: none;
+  border: none;
     box-shadow: none;
     padding: 5px 8px; /* Adjust padding as needed */
 }

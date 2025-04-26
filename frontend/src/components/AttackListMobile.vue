@@ -15,6 +15,10 @@ const props = defineProps({
     type: Set,
     default: () => new Set()
   },
+  selectedIdsSet: {
+    type: Set,
+    default: () => new Set()
+  },
   allowDeletion: {
     type: Boolean,
     default: false
@@ -46,7 +50,7 @@ function handleClick(attack) {
         class="attack-list-item"
         :class="{ 
             'is-actionable': mode === 'action', 
-            'is-disabled': disabledIds.has(attack.id)
+            'is-selected': selectedIdsSet.has(attack.id)
         }"
         @click="handleClick(attack)"
       >
@@ -90,30 +94,17 @@ function handleClick(attack) {
 }
 
 /* Apply hover style directly to the card */
-.attack-list-item.is-actionable:hover:not(.is-disabled) > :deep(.attack-card-content) {
+.attack-list-item.is-actionable:hover:not(.is-selected) > :deep(.attack-card-content) {
   transform: scale(1.02); /* Slight scale */
   border-color: var(--color-accent-secondary);
   box-shadow: 2px 2px 0px var(--color-accent-secondary);
 }
 
-/* Style for disabled items */
-.attack-list-item.is-disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-.attack-list-item.is-disabled > :deep(.attack-card-content) {
-   border-color: var(--color-border);
-   box-shadow: 1px 1px 0px var(--color-border); 
-   transform: none;
-}
-
-
-/* Add selected styles if needed (e.g., for favorite selection) */
+/* Style for selected items */
 .attack-list-item.is-selected > :deep(.attack-card-content) { 
   border-color: var(--color-accent);
   box-shadow: 2px 2px 0px var(--color-accent);
 }
-
 
 .empty-list-message {
   padding: 20px 10px;

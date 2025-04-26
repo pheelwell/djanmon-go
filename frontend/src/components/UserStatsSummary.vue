@@ -95,7 +95,7 @@ const nemesisDisplay = computed(() => {
 
 .my-stats-grid p span {
     font-weight: bold; /* Make value bold */
-    color: var(--color-text); 
+    color: var(--color-text);
 }
 
 /* Remove old .my-stats styles */

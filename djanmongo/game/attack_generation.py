@@ -34,15 +34,37 @@ def construct_generation_prompt(concept_text: str, favorite_attacks: Optional[Li
     
     favorites_section = ""
     if favorite_attacks:
-        favorites_list = "\n".join([f"- \"{attack.name}\": {attack.description}" for attack in favorite_attacks])
+        favorites_details = []
+        for attack in favorite_attacks:
+            scripts_info = []
+            # Fetch related scripts for the attack
+            for script in attack.scripts.all().order_by('id'): # Get associated scripts
+                trigger = "unknown"
+                for key, field_name in TRIGGER_FIELD_MAP.items():
+                    if getattr(script, field_name, False):
+                        trigger = key
+                        break
+                scripts_info.append(
+                    f"    - Trigger: {trigger}\n" +
+                    f"      Lua Code:\n" +
+                    f"```lua\n{script.lua_code}\n```"
+                )
+            attack_detail = (
+                f"- Name: \"{attack.name}\"\n" +
+                f"  Description: {attack.description}\n" +
+                f"  Momentum Cost: {attack.momentum_cost}\n" +
+                f"  Scripts:\n" +
+                "\n".join(scripts_info)
+            )
+            favorites_details.append(attack_detail)
+
         favorites_section = (f"""
 
-## Favorite Attacks (Inspiration):
+## Favorite Attacks (Full Examples for Inspiration):
 Consider the following attacks (provided by the user as favorites) as inspiration for the theme and mechanics of the new attacks.
-Feel free to reuse or build upon concepts or custom statuses from these attacks if appropriate for the requested concept '{concept_text}'.
+Feel free to reuse or build upon concepts, script logic, or custom statuses from these examples if appropriate for the requested concept '{concept_text}'.
 
-{favorites_list}
-""")
+""" + "\n\n".join(favorites_details))
 
     # Detailed Lua API Documentation for the Prompt
     lua_api_docs = ("""

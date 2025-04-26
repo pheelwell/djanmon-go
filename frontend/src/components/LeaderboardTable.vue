@@ -67,95 +67,122 @@ function handleCardMouseLeave() {
 </script>
 
 <template>
-  <section class="leaderboard-table-section">
-    <h2>Top Players</h2>
-    <div v-if="isLoading && leaderboardData.length === 0" class="loading">Loading leaderboard...</div>
-    <table v-else-if="leaderboardData && leaderboardData.length > 0" class="leaderboard-table user-leaderboard">
-      <thead>
-        <tr>
-          <th>#</th>
-          <th>Name</th>
-          <th>Wins</th>
-          <th>Atks</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr v-for="(user, index) in leaderboardData" :key="user.id">
-          <td>{{ index + 1 }}</td>
-          <td>
-            {{ user.username }}
-            <span v-if="user.is_bot" class="bot-label">(BOT)</span>
-          </td>
-          <td>{{ user.total_wins }}</td>
-          <td class="loadout-cell">
-            <span v-if="!user.selected_attacks || user.selected_attacks.length === 0">-</span>
-            <span
-              v-for="attack in user.selected_attacks"
-              :key="attack.id"
-              class="attack-item"
-              @mouseenter="handleMouseEnter(attack, $event)"
-              @mouseleave="handleMouseLeave"
-            >
-              {{ attack.emoji || attack.name }}
-            </span>
-          </td>
-        </tr>
-      </tbody>
-    </table>
-    <div v-else-if="!isLoading" class="no-data-message">
-      No player data available yet.
-    </div>
+  <div class="leaderboard-table-component-root">
+    <section class="leaderboard-table-section">
+      <h2>Top Players</h2>
+      <div v-if="isLoading && leaderboardData.length === 0" class="loading">Loading leaderboard...</div>
+      <table v-else-if="leaderboardData && leaderboardData.length > 0" class="leaderboard-table user-leaderboard">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Name</th>
+            <th>Wins</th>
+            <th>Atks</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="(user, index) in leaderboardData" :key="user.id">
+            <td>{{ index + 1 }}</td>
+            <td>
+              {{ user.username }}
+              <span v-if="user.is_bot" class="bot-label">(BOT)</span>
+            </td>
+            <td>{{ user.total_wins }}</td>
+            <td class="loadout-cell">
+              <span v-if="!user.selected_attacks || user.selected_attacks.length === 0">-</span>
+              <span
+                v-for="attack in user.selected_attacks"
+                :key="attack.id"
+                class="attack-item"
+                @mouseenter="handleMouseEnter(attack, $event)"
+                @mouseleave="handleMouseLeave"
+              >
+                {{ attack.emoji || attack.name }}
+              </span>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <div v-else-if="!isLoading" class="no-data-message">
+        No player data available yet.
+      </div>
 
-    <!-- Attack Card Popover - Use AttackCardDisplay now -->
-    <div
-      v-if="hoveredAttack"
-      class="attack-hover-popup"
-      :style="hoverCardStyle"
-      @mouseenter="handleCardMouseEnter"
-      @mouseleave="handleCardMouseLeave"
-    >
-      <AttackCardDisplay :attack="hoveredAttack" />
-    </div>
+      <!-- Attack Card Popover - Use AttackCardDisplay now -->
+      <div
+        v-if="hoveredAttack"
+        class="attack-hover-popup"
+        :style="hoverCardStyle"
+        @mouseenter="handleCardMouseEnter"
+        @mouseleave="handleCardMouseLeave"
+      >
+        <AttackCardDisplay :attack="hoveredAttack" />
+      </div>
 
-  </section>
+    </section>
 
-  <!-- NEW: Attack Leaderboard Section -->
-  <section class="leaderboard-table-section attack-leaderboard-section">
-    <h2>Top Attacks</h2>
-    <div v-if="isLoading && attackLeaderboardData.length === 0" class="loading">Loading attack stats...</div>
-    <table v-else-if="attackLeaderboardData && attackLeaderboardData.length > 0" class="leaderboard-table attack-leaderboard">
-      <thead>
-        <tr>
-          <th>Attack</th>
-          <th>Owner</th>
-          <th>Used</th>
-          <th>Wins</th>
-        </tr>
-      </thead>
-      <tbody>
-        <!-- Example structure, replace with actual data fields -->
-        <tr v-for="(attackStat, index) in attackLeaderboardData" :key="attackStat.attack_id || index">
-          <td>
-            <span class="attack-item" 
-                  @mouseenter="handleMouseEnter(attackStat.attack_details, $event)" 
-                  @mouseleave="handleMouseLeave">
-              {{ attackStat.attack_details?.emoji || '' }} {{ attackStat.attack_details?.name || 'Unknown' }}
-            </span>
-          </td>
-          <td>{{ attackStat.owner_username || '-' }}</td>
-          <td>{{ attackStat.times_used ?? '-' }}</td>
-          <td>{{ attackStat.total_wins ?? '-' }}</td> 
-        </tr>
-      </tbody>
-    </table>
-    <div v-else-if="!isLoading" class="no-data-message">
-      No attack data available yet.
-    </div>
-  </section>
-
+    <!-- UPDATED: Attack Leaderboard Section -->
+    <section class="leaderboard-table-section attack-leaderboard-section">
+      <h2>Top Attacks</h2>
+      <div v-if="isLoading && attackLeaderboardData.length === 0" class="loading">Loading attack stats...</div>
+      <table v-else-if="attackLeaderboardData && attackLeaderboardData.length > 0" class="leaderboard-table attack-leaderboard">
+        <thead>
+          <tr>
+            <th title="Attack">Atk</th>
+            <th title="Creator">Owner</th>
+            <th title="Times Used Globally">Used</th>
+            <th title="Overall Win Rate %">Win%</th>
+            <th title="Damage Per Use (Avg)">DPU</th>
+            <th title="Wins/Losses vs Humans">Human (W/L)</th>
+            <th title="Wins/Losses vs Bots">BOT (W/L)</th>
+            <th title="Total Damage Dealt">Dmg Done</th>
+            <th title="Most Used With">Synergy</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="(attackStat, index) in attackLeaderboardData" :key="attackStat.attack_details?.id || index">
+            <td class="center">
+              <span class="attack-item emoji-only"
+                    :title="attackStat.attack_details?.name || 'Unknown Attack'"
+                    @mouseenter="handleMouseEnter(attackStat.attack_details, $event)"
+                    @mouseleave="handleMouseLeave">
+                {{ attackStat.attack_details?.emoji || '?' }} 
+              </span>
+            </td>
+            <td>{{ attackStat.owner_username || '-' }}</td>
+            <td class="center">{{ attackStat.times_used ?? '-' }}</td>
+            <td class="center">{{ attackStat.win_rate ?? '-' }}%</td>
+            <td class="center">{{ attackStat.damage_per_use ?? '-' }}</td>
+            <td class="center">{{ attackStat.wins_vs_human ?? 0 }}/{{ attackStat.losses_vs_human ?? 0 }}</td>
+            <td class="center">{{ attackStat.wins_vs_bot ?? 0 }}/{{ attackStat.losses_vs_bot ?? 0 }}</td>
+            <td class="center">{{ attackStat.total_damage_dealt ?? '-' }}</td>
+            <td class="synergy-cell">
+                <span v-if="!attackStat.top_co_used_attacks || attackStat.top_co_used_attacks.length === 0">-</span>
+                 <template v-else>
+                   <span v-for="(co_attack, idx) in attackStat.top_co_used_attacks" :key="co_attack.id"
+                         class="attack-item synergy-item emoji-only"
+                         :title="co_attack.name"
+                         @mouseenter="handleMouseEnter(co_attack, $event)" 
+                         @mouseleave="handleMouseLeave">
+                      {{ co_attack.emoji || '?' }}
+                   </span>
+                 </template>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <div v-else-if="!isLoading" class="no-data-message">
+        No attack data available yet.
+      </div>
+    </section>
+  </div>
 </template>
 
 <style scoped>
+.leaderboard-table-component-root {
+  /* Add any necessary styles for the root wrapper if needed,
+     or leave it empty if it only serves structure. */
+}
+
 .leaderboard-table-section {
     margin-top: 20px;
     position: relative; /* Keep for popup */
@@ -196,7 +223,7 @@ h2 {
 
 .leaderboard-table th,
 .leaderboard-table td {
-  padding: 8px 10px;
+  padding: 6px 8px; /* Slightly reduce padding */
   text-align: left;
   border: 1px solid var(--color-border); /* Border for all cells */
   font-size: 0.9em;
@@ -313,6 +340,49 @@ h2 {
 /* Attack Leaderboard Specifics */
 .attack-leaderboard-section {
     margin-top: 30px; /* More space before attack leaderboard */
+}
+
+/* Adjust column widths/alignment */
+.attack-leaderboard th:first-child, 
+.attack-leaderboard td:first-child { 
+    width: 45px; 
+    text-align: center;
+    padding-left: 3px;
+    padding-right: 3px;
+} /* Attack Emoji */
+.attack-leaderboard td:nth-child(2) { width: 80px; } /* Owner */
+.attack-leaderboard td:nth-child(3) { width: 50px; } /* Used */
+.attack-leaderboard td:nth-child(4) { width: 55px; } /* Win% */
+.attack-leaderboard td:nth-child(5) { width: 50px; } /* DPU */
+.attack-leaderboard td:nth-child(6) { width: 85px; } /* Human W/L */
+.attack-leaderboard td:nth-child(7) { width: 75px; } /* BOT W/L */
+.attack-leaderboard td:nth-child(8) { width: 70px; } /* Dmg Done */
+.attack-leaderboard td:last-child { width: auto; min-width: 70px; } /* Synergy */
+
+.center {
+    text-align: center;
+}
+
+.synergy-cell {
+    text-align: center;
+}
+.synergy-item {
+    margin-right: 3px;
+    padding: 1px 2px;
+    font-size: 0.9em;
+    border: 1px solid var(--color-border);
+}
+.synergy-item:last-child {
+    margin-right: 0;
+}
+
+.attack-item.emoji-only {
+    font-size: 1.2em; /* Make emoji slightly larger */
+    padding: 1px; /* Minimal padding */
+    display: inline-flex; /* Center vertically if needed */
+    justify-content: center;
+    align-items: center;
+    min-width: 20px; /* Ensure minimum width for hover */
 }
 
 </style> 

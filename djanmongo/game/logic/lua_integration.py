@@ -122,9 +122,19 @@ def apply_std_damage(context, base_power, target_role=None):
         context['hp'][target] = new_hp
         context['state_changed'] = True
         target_name = get_player_name(context, target) or target
-        # --- ADD AUTOMATIC DAMAGE LOGGING --- 
-        log(context, f"{target_name} took {final_damage} damage.", "damage", "script", {"damage_dealt": final_damage})
-        # --- END LOGGING --- 
+        # --- MODIFY AUTOMATIC DAMAGE LOGGING ---
+        log_details = {
+            "damage_dealt": final_damage,
+            "target": target_name, # Add target name for clarity
+            "target_role": target,
+        }
+        # Add source attack ID if available in the context
+        if context.get('source_attack'):
+            log_details["source_attack_id"] = context['source_attack'].id
+            log_details["source_attack_name"] = context['source_attack'].name
+
+        log(context, f"{target_name} took {final_damage} damage.", "damage", "script", log_details)
+        # --- END MODIFICATION ---
         return final_damage # Return damage dealt
     else:
         return 0 # Return 0 if HP didn't change
@@ -156,7 +166,22 @@ def apply_std_hp_change(context, hp_change, target_role=None):
         context['hp'][target] = new_hp
         context['state_changed'] = True
         target_name = get_player_name(context, target) or target
-        effect = "heal" if actual_change > 0 else "damage" # Treat HP cost as damage type
+        effect = "heal" if actual_change > 0 else "hp_cost" # Distinguish cost from damage
+        log_text = f"{target_name} {'recovered' if actual_change > 0 else 'lost'} {abs(actual_change)} HP."
+
+        # --- ADD AUTOMATIC LOGGING FOR HP CHANGE ---
+        log_details = {
+            "hp_change": actual_change,
+            "target": target_name,
+            "target_role": target,
+        }
+        # Add source attack ID if available in the context
+        if context.get('source_attack'):
+             log_details["source_attack_id"] = context['source_attack'].id
+             log_details["source_attack_name"] = context['source_attack'].name
+
+        log(context, log_text, effect, "script", log_details)
+        # --- END LOGGING ---
         return actual_change # Return the actual change
     else:
         return 0 # Return 0 if no change

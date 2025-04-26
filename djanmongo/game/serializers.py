@@ -2,6 +2,7 @@ from rest_framework import serializers
 from .models import Attack, Battle, AttackUsageStats
 from users.serializers import UserSerializer, BasicUserSerializer
 from .logic import calculate_momentum_cost_range
+import collections # For sorting co-used attacks
 
 class AttackSerializer(serializers.ModelSerializer):
     class Meta:
@@ -118,22 +119,98 @@ class GenerateAttackRequestSerializer(serializers.Serializer):
         help_text="Optional list of up to 6 favorite attack IDs to influence generation."
     )
 
-# --- NEW: Attack Leaderboard Serializer ---
+# --- Nested Attack Detail Serializer (reuse if needed) ---
+class NestedAttackDetailSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Attack
+        # Include fields needed for hover card display
+        fields = ('id', 'name', 'emoji', 'description', 'momentum_cost', 'creator')
+
+
 class AttackLeaderboardSerializer(serializers.ModelSerializer):
     # Nest the basic attack details
-    attack_details = AttackSerializer(source='attack', read_only=True)
+    # attack_details = AttackSerializer(source='attack', read_only=True)
+    attack_details = NestedAttackDetailSerializer(source='attack', read_only=True)
     # Get the owner's username from the related Attack's creator field
     owner_username = serializers.CharField(source='attack.creator.username', read_only=True, allow_null=True)
     # Rename wins_contributed for clarity in API response
-    total_wins = serializers.IntegerField(source='wins_contributed', read_only=True)
+    # total_wins = serializers.IntegerField(source='wins_contributed', read_only=True)
+
+    # --- Calculated Fields ---
+    win_rate = serializers.SerializerMethodField()
+    win_rate_vs_bot = serializers.SerializerMethodField()
+    damage_per_use = serializers.SerializerMethodField()
+    top_co_used_attacks = serializers.SerializerMethodField()
+    # --- End Calculated Fields ---
 
     class Meta:
         model = AttackUsageStats
+        # Include new raw stat fields and calculated fields
         fields = (
-            # 'attack', # Don't need the raw ID probably
-            'attack_details',
+            'attack_details', # Includes ID, name, emoji etc.
             'owner_username',
             'times_used',
-            'total_wins' 
+            'wins_vs_human',
+            'losses_vs_human',
+            'wins_vs_bot',
+            'losses_vs_bot',
+            'total_damage_dealt',
+            'total_healing_done',
+            # Calculated fields
+            'win_rate',
+            'win_rate_vs_bot',
+            'damage_per_use',
+            'top_co_used_attacks',
+            # Exclude raw co-used counts unless needed directly
+            # 'co_used_with_counts',
         )
-# --- END Attack Leaderboard Serializer ---
+        read_only_fields = fields # Make all fields read-only
+
+    def get_win_rate(self, obj):
+        total_wins = obj.wins_vs_human + obj.wins_vs_bot
+        total_uses = obj.wins_vs_human + obj.losses_vs_human + obj.wins_vs_bot + obj.losses_vs_bot # Use wins+losses for total games
+        if total_uses == 0:
+            return 0.0
+        # Corrected calculation using total games
+        return round((total_wins / total_uses) * 100, 1) # Percentage rounded 
+
+    def get_win_rate_vs_bot(self, obj):
+        total_bot_uses = obj.wins_vs_bot + obj.losses_vs_bot
+        if total_bot_uses == 0:
+            return None # Or 0.0 if preferred
+        return round((obj.wins_vs_bot / total_bot_uses) * 100, 1)
+
+    def get_damage_per_use(self, obj):
+        if obj.times_used == 0:
+            return 0
+        # Ensure division by zero is handled, though times_used should be > 0 if damage exists
+        return round(obj.total_damage_dealt / obj.times_used) if obj.times_used > 0 else 0
+
+    def get_top_co_used_attacks(self, obj):
+        if not isinstance(obj.co_used_with_counts, dict) or not obj.co_used_with_counts:
+            return []
+
+        # Sort co-used attacks by count descending
+        sorted_counts = sorted(obj.co_used_with_counts.items(), key=lambda item: item[1], reverse=True)
+
+        # Get top 3 attack IDs
+        top_ids = [int(attack_id_str) for attack_id_str, count in sorted_counts[:3]]
+
+        # Fetch basic details for these top attacks (reduces extra DB hits per row)
+        # This relies on having fetched these attacks somewhere accessible,
+        # maybe via a context passed to the serializer or a prefetched list.
+        # Simple approach (less efficient): Fetch here
+        top_attacks_qs = Attack.objects.filter(id__in=top_ids).values('id', 'name', 'emoji')
+        top_attacks_dict = {a['id']: a for a in top_attacks_qs}
+
+        # Return basic info, ordered by original count
+        result = []
+        for attack_id in top_ids:
+            attack_info = top_attacks_dict.get(attack_id)
+            if attack_info:
+                result.append({
+                    'id': attack_info['id'],
+                    'name': attack_info['name'],
+                    'emoji': attack_info['emoji']
+                })
+        return result

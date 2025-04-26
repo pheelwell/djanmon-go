@@ -1,14 +1,16 @@
-from django.contrib import admin
+from django.contrib import admin, messages
 from django import forms
 from django.utils.html import format_html
 import json # Added for formatting
-from .models import Attack, Battle, Script, GameConfiguration
+from .models import Attack, Battle, Script, GameConfiguration, AttackUsageStats
+from django.db import transaction # <-- Import transaction
 from django.db.models import Count, Case, When, Value, IntegerField # Added for annotation
 from unfold.admin import ModelAdmin
 from django.contrib.admin import SimpleListFilter # Added for custom filter
 # Import the correct widget based on the user-provided library
 from djangoeditorwidgets.widgets import MonacoEditorWidget 
 from django.utils.safestring import mark_safe
+import traceback # For detailed error logging
 
 # --- Game Configuration Admin ---
 @admin.register(GameConfiguration)
@@ -118,6 +120,136 @@ class BattleLogErrorFilter(SimpleListFilter):
             return queryset.exclude(last_turn_summary__icontains=error_pattern)
         # Return the full queryset if no filter is selected
         return queryset
+
+# --- NEW: Attack Usage Stats Admin --- 
+@admin.register(AttackUsageStats)
+class AttackUsageStatsAdmin(ModelAdmin):
+    list_display = ('attack_name', 'times_used', 'wins_vs_human', 'losses_vs_human', 'wins_vs_bot', 'losses_vs_bot', 'total_damage_dealt')
+    search_fields = ('attack__name',) # Search by related attack name
+    readonly_fields = ('attack',) # Make attack read-only in detail view
+    list_filter = ()
+    ordering = ('-times_used', 'attack__name')
+
+    actions = ['recalculate_all_stats'] # Add the custom action
+
+    @admin.display(description='Attack Name', ordering='attack__name') # Allow ordering by name
+    def attack_name(self, obj):
+        # Handle potential case where attack might be deleted but stats remain
+        return obj.attack.name if obj.attack else "[Deleted Attack]"
+
+    @admin.action(description='(SLOW) Recalculate ALL usage stats from LOGS')
+    def recalculate_all_stats(self, request, queryset):
+        # Note: queryset is ignored here as we recalculate ALL stats globally
+        try:
+            with transaction.atomic():
+                # 1. Reset existing stats - CORRECTED FIELDS
+                num_reset = AttackUsageStats.objects.update(
+                    times_used=0, 
+                    wins_vs_human=0,
+                    losses_vs_human=0,
+                    wins_vs_bot=0,
+                    losses_vs_bot=0,
+                    total_damage_dealt=0,
+                    total_healing_done=0,
+                    co_used_with_counts={}
+                )
+                print(f"[Admin Action] Reset {num_reset} AttackUsageStats records.")
+
+                # 2. Iterate through finished battles and recalculate from logs
+                processed_battles = 0
+                attacks_found_total = 0
+                wins_contributed_total = 0
+
+                # Prepare a cache for Attack objects to reduce DB lookups by name
+                attack_cache = {attack.name: attack for attack in Attack.objects.all()}
+                print(f"[Admin Action] Cached {len(attack_cache)} Attack objects.")
+
+                # Use iterator for memory efficiency
+                for battle in Battle.objects.filter(status='finished').iterator(chunk_size=500): # Smaller chunk size might be better for log processing
+                    processed_battles += 1
+                    winner_role = battle.get_player_role(battle.winner) if battle.winner else None
+                    is_vs_bot = battle.player2_is_ai_controlled # Determine if it was a bot battle
+                    unique_attacks_used_in_battle = set() # Store Attack objects
+
+                    if not isinstance(battle.last_turn_summary, list):
+                        print(f"[Admin Action Warning] Battle {battle.id} has invalid log format. Skipping.")
+                        continue
+
+                    # Parse logs for this battle
+                    for log_entry in battle.last_turn_summary:
+                        if isinstance(log_entry, dict) and \
+                           log_entry.get('effect_type') == 'action' and \
+                           isinstance(log_entry.get('effect_details'), dict) and \
+                           'attack_name' in log_entry['effect_details']:
+
+                            attack_name = log_entry['effect_details']['attack_name']
+                            log_source_role = log_entry.get('source') # 'player1' or 'player2'
+
+                            # Find attack using cache first, then DB fallback (case-sensitive)
+                            attack_obj = attack_cache.get(attack_name)
+                            if not attack_obj:
+                                # Fallback DB lookup if not in cache (less efficient)
+                                try:
+                                     # Consider if case-insensitivity is needed: attack_obj = Attack.objects.get(name__iexact=attack_name)
+                                     attack_obj = Attack.objects.get(name=attack_name)
+                                     attack_cache[attack_name] = attack_obj # Add to cache if found
+                                except Attack.DoesNotExist:
+                                    print(f"[Admin Action Warning] Attack '{attack_name}' mentioned in Battle {battle.id} log not found in DB. Skipping.")
+                                    continue
+
+                            # If attack found, process it
+                            if attack_obj:
+                                stats, created = AttackUsageStats.objects.get_or_create(attack=attack_obj)
+                                
+                                # Increment times_used (only once per attack per battle)
+                                if attack_obj not in unique_attacks_used_in_battle:
+                                    stats.times_used += 1
+                                    # REMOVED save here - save once at the end of processing this attack
+                                    unique_attacks_used_in_battle.add(attack_obj)
+                                    attacks_found_total += 1
+
+                                # Check if this winner used this attack in this battle log
+                                if winner_role and log_source_role == winner_role:
+                                    if not hasattr(battle, f'_counted_win_{attack_obj.id}'):
+                                        # --- CORRECTED WIN INCREMENT --- 
+                                        if is_vs_bot:
+                                            stats.wins_vs_bot += 1
+                                        else:
+                                            stats.wins_vs_human += 1
+                                        # stats.wins_contributed += 1 # <- REMOVED OLD LINE
+                                        # REMOVED save here - save once at the end
+                                        setattr(battle, f'_counted_win_{attack_obj.id}', True)
+                                        wins_contributed_total += 1
+                                        
+                                stats.save() # Save the stat object ONCE after all updates for this attack in this battle
+
+                    # Optional: Clean up temporary attributes if needed, though they are instance-specific
+                    # for attack_obj in unique_attacks_used_in_battle:
+                    #    if hasattr(battle, f'_counted_win_{attack_obj.id}'):
+                    #        delattr(battle, f'_counted_win_{attack_obj.id}')
+
+
+            # 3. Optional Cleanup of orphan stats (stats for deleted attacks)
+            # Note: This permanently deletes stats. Only uncomment if intended.
+            # deleted_stats_count = 0
+            # try:
+            #     orphan_stats = AttackUsageStats.objects.filter(attack__isnull=True)
+            #     deleted_stats_count = orphan_stats.count()
+            #     if deleted_stats_count > 0:
+            #         orphan_stats.delete()
+            #         print(f"[Admin Action] Cleaned up {deleted_stats_count} AttackUsageStats records for deleted attacks.")
+            # except Exception as cleanup_e:
+            #     print(f"[Admin Action Warning] Error during orphan stats cleanup: {cleanup_e}")
+
+
+            self.message_user(request, f"Successfully recalculated stats from logs. Processed {processed_battles} finished battles. Incremented 'times_used' {attacks_found_total} times and 'wins_contributed' {wins_contributed_total} times across relevant attacks. Note: This process can be slow.", messages.SUCCESS)
+            print(f"[Admin Action] Log-based recalculation complete. Processed {processed_battles} battles.")
+
+        except Exception as e:
+            traceback.print_exc() # Print full traceback to server logs
+            self.message_user(request, f"ERROR during log-based recalculation: {e}", messages.ERROR)
+            print(f"[Admin Action Error] Log-based recalculation failed: {e}")
+# --- END Attack Usage Stats Admin ---
 
 # --- Battle Admin Definition (Ensure it's also correct) ---
 @admin.register(Battle)

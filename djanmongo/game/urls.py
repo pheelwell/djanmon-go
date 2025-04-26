@@ -19,4 +19,5 @@ urlpatterns = [
     path('attacks/my-attacks/', views.MyAttacksListView.as_view(), name='my_attacks_list'),
     # NEW: Attack Delete Endpoint
     path('attacks/<int:pk>/delete/', views.AttackDeleteView.as_view(), name='attack-delete'),
+    path('leaderboard/attacks/', views.AttackLeaderboardView.as_view(), name='attack_leaderboard'),
 ]

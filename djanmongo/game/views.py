@@ -406,7 +406,7 @@ class GenerateAttacksView(views.APIView):
         
         required_credits = game_config.attack_generation_cost
         # --- End Get Cost ---
-        
+
         # --- Check Booster Credits --- 
         if user.booster_credits < required_credits:
             return Response(
@@ -527,18 +527,19 @@ class AttackLeaderboardView(generics.ListAPIView):
     def get_queryset(self):
         # Pre-fetch related data for efficiency
         queryset = AttackUsageStats.objects.select_related(
-            'attack', 
+            'attack',
             'attack__creator' # Include creator for username
-        ).all()
+        ).all() # Correct base queryset
 
         # Allow sorting via query parameters (e.g., ?sort=wins or ?sort=used)
-        sort_by = self.request.query_params.get('sort', 'used') # Default sort by times_used
+        # sort_by = self.request.query_params.get('sort', 'used') # Default sort by times_used
 
-        if sort_by == 'wins':
-            queryset = queryset.order_by('-wins_contributed', '-times_used') # Order by wins DESC, then used DESC
-        else: # Default or sort=used
-            queryset = queryset.order_by('-times_used', '-wins_contributed') # Order by used DESC, then wins DESC
-        
+        # --- SIMPLIFIED SORTING FOR NOW ---
+        # Let's temporarily remove custom sorting to eliminate it as a potential issue
+        # We rely on the default ordering in the serializer/model or apply a simple one here
+        queryset = queryset.order_by('-times_used') # Simple default ordering
+        # --- END SIMPLIFIED SORTING ---
+
         # Limit the results (e.g., top 50)
         limit = int(self.request.query_params.get('limit', 50))
         return queryset[:limit]

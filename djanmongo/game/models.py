@@ -95,13 +95,27 @@ class Attack(models.Model):
 # --- NEW: Attack Usage Stats Model ---
 class AttackUsageStats(models.Model):
     attack = models.OneToOneField(
-        Attack, 
-        on_delete=models.CASCADE, 
+        Attack,
+        on_delete=models.CASCADE,
         primary_key=True, # Use the attack's ID as the primary key
         related_name='usage_stats'
     )
     times_used = models.PositiveIntegerField(default=0, db_index=True, help_text="Total times this attack was used in any battle.")
-    wins_contributed = models.PositiveIntegerField(default=0, db_index=True, help_text="Total wins in battles where this attack was used by the winner.")
+    # Removed wins_contributed - we'll calculate win rates differently
+
+    # --- NEW STAT FIELDS ---
+    wins_vs_human = models.PositiveIntegerField(default=0, db_index=True, help_text="Wins in battles vs human opponents where this attack was used by the winner.")
+    losses_vs_human = models.PositiveIntegerField(default=0, db_index=True, help_text="Losses in battles vs human opponents where this attack was used by the loser.")
+    wins_vs_bot = models.PositiveIntegerField(default=0, db_index=True, help_text="Wins in battles vs bot opponents where this attack was used by the winner.")
+    losses_vs_bot = models.PositiveIntegerField(default=0, db_index=True, help_text="Losses in battles vs bot opponents where this attack was used by the loser.")
+
+    total_damage_dealt = models.BigIntegerField(default=0, help_text="Sum of all direct damage dealt by this attack across all uses.")
+    total_healing_done = models.BigIntegerField(default=0, help_text="Sum of all direct healing done by this attack across all uses.")
+
+    # Stores counts of other attacks used in the same battles by the same player
+    # Format: {"<attack_id>": <count>, "<attack_id>": <count>, ...}
+    co_used_with_counts = models.JSONField(default=dict, help_text="Counts of other attacks used alongside this one.")
+    # --- END NEW STAT FIELDS ---
 
     def __str__(self):
         return f"Stats for {self.attack.name}"
@@ -133,7 +147,7 @@ class Battle(models.Model):
     custom_statuses_player1 = models.JSONField(default=dict)
     custom_statuses_player2 = models.JSONField(default=dict)
     registered_scripts = models.JSONField(default=list) # Stores active script instances
-    last_turn_summary = models.JSONField(default=list) # Log of actions/effects from the LAST turn
+    last_turn_summary = models.JSONField(default=list) # Log of actions/effects
 
     # --- Momentum and Turn --- 
     current_momentum_player1 = models.IntegerField(default=0) 

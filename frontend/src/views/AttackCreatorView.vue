@@ -89,7 +89,8 @@
                 :attacks="filteredUserAttacks"
                 mode="action"
                 @attackClick="toggleFavoriteSelection($event)"
-                :disabledIds="new Set(selectedFavoriteAttackIds)"
+                :disabledIds="new Set()"
+                :selectedIdsSet="selectedFavoriteAttackIdsSet"
                 class="favorite-attack-selector-mobile"
             />
         </div>
@@ -143,6 +144,11 @@ const filteredUserAttacks = computed(() => {
     (attack.name && attack.name.toLowerCase().includes(lowerQuery)) ||
     (attack.description && attack.description.toLowerCase().includes(lowerQuery)) // Optional: search description too
   );
+});
+
+// --- NEW: Computed property for Selected IDs Set ---
+const selectedFavoriteAttackIdsSet = computed(() => {
+    return new Set(selectedFavoriteAttackIds.value);
 });
 
 // --- NEW: Mobile Favorite Selection Handler ---
@@ -252,11 +258,6 @@ onMounted(async () => {
   text-transform: uppercase;
 }
 
-/* Assuming input styles are handled globally in main.css */
-.form-group input[type="text"],
-.search-input {
-    /* Styles should come from main.css */
-}
 
 .char-counter {
   display: block;
@@ -278,10 +279,6 @@ onMounted(async () => {
   align-items: center;
   gap: 8px;
   justify-content: center;
-}
-
-.open-booster-button.disabled-look {
-    /* Global :disabled styles should handle this */
 }
 
 .button-icon {

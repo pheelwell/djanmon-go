@@ -15,15 +15,18 @@ const authStore = useAuthStore();
 const {
   myStats,
   leaderboardData,
+  attackLeaderboardData,
   isLoadingMyStats,
   isLoadingLeaderboard,
-  leaderboardError
+  isLoadingAttackLeaderboard,
+  leaderboardError,
+  attackLeaderboardError
 } = storeToRefs(gameStore);
 
 // Destructure actions
-const { fetchMyStats, fetchLeaderboard } = gameStore;
+const { fetchMyStats, fetchLeaderboard, fetchAttackLeaderboardData } = gameStore;
 
-const isLoading = computed(() => isLoadingMyStats.value || isLoadingLeaderboard.value);
+const isLoading = computed(() => isLoadingMyStats.value || isLoadingLeaderboard.value || isLoadingAttackLeaderboard.value);
 const isAuthenticated = computed(() => authStore.isAuthenticated);
 
 // Fetch data when the component is mounted
@@ -33,6 +36,7 @@ onMounted(() => {
     fetchMyStats();
   }
   fetchLeaderboard();
+  fetchAttackLeaderboardData();
 });
 
 
@@ -43,7 +47,10 @@ onMounted(() => {
     <h1>Leaderboard</h1>
 
     <div v-if="leaderboardError" class="error-message">
-      ⚠️ Error loading data: {{ leaderboardError }}
+      ⚠️ Error loading player data: {{ leaderboardError }}
+    </div>
+    <div v-if="attackLeaderboardError" class="error-message">
+      ⚠️ Error loading attack data: {{ attackLeaderboardError }}
     </div>
 
     <!-- Current User Stats Section (Needs styling in its component) -->
@@ -57,7 +64,8 @@ onMounted(() => {
     <!-- Leaderboard Table Section (Needs styling in its component) -->
     <LeaderboardTable
         :leaderboardData="leaderboardData"
-        :isLoading="isLoadingLeaderboard"
+        :attackLeaderboardData="attackLeaderboardData"
+        :isLoading="isLoading"
         class="leaderboard-table-section"
     />
 

@@ -1,8 +1,127 @@
 import random
 import math
 import uuid
-from .models import Battle, Attack, Script
+from .models import Battle, Attack, Script, AttackUsageStats
 from users.models import User # Although we get users via battle object
+from django.db import transaction # Import transaction for atomic updates
+from django.core.exceptions import ObjectDoesNotExist # For attack lookup
+
+# --- NEW: Function to Update Stats from Log ---
+@transaction.atomic # Ensure atomicity for stat updates
+def update_attack_stats_from_battle_log(battle: Battle):
+    """
+    Parses the battle log (last_turn_summary) of a finished battle
+    and updates the AttackUsageStats accordingly.
+    """
+    if battle.status != 'finished':
+        print(f"[Stats Update] Battle {battle.id} not finished. Skipping.")
+        return
+
+    print(f"[Stats Update] Processing finished Battle {battle.id}...")
+    winner = battle.winner
+    loser = battle.player1 if winner == battle.player2 else battle.player2
+    winner_role = battle.get_player_role(winner) if winner else None
+    loser_role = battle.get_player_role(loser) if loser else None
+    is_vs_bot = battle.player2_is_ai_controlled # Check if p2 was the bot
+
+    # --- Aggregated data from this battle's log ---
+    damage_dealt_by_attack = {} # {attack_id: total_damage}
+    healing_done_by_attack = {} # {attack_id: total_healing}
+    attacks_used_by_player = {'player1': set(), 'player2': set()} # {role: set(attack_id)}
+    # ---------------------------------------------
+
+    if not isinstance(battle.last_turn_summary, list):
+        print(f"  [Stats Update Warning] Invalid log format for Battle {battle.id}. Cannot update stats.")
+        return
+
+    # --- Parse the entire battle log ---
+    for log_entry in battle.last_turn_summary:
+        if not isinstance(log_entry, dict): continue
+
+        effect_type = log_entry.get('effect_type')
+        details = log_entry.get('effect_details')
+        source_role = log_entry.get('source') # player1 or player2
+
+        if not isinstance(details, dict): continue
+
+        attack_id = details.get('source_attack_id')
+        if not attack_id: continue # Need attack ID to attribute stats
+
+        # Track which attacks were used by whom
+        if effect_type == 'action' and source_role in ['player1', 'player2']:
+            attacks_used_by_player[source_role].add(attack_id)
+
+        # Aggregate damage (from logs created by apply_std_damage)
+        if effect_type == 'damage':
+            damage = details.get('damage_dealt')
+            if isinstance(damage, int) and damage > 0:
+                damage_dealt_by_attack[attack_id] = damage_dealt_by_attack.get(attack_id, 0) + damage
+
+        # Aggregate healing (from logs created by apply_std_hp_change)
+        if effect_type == 'heal':
+            healing = details.get('hp_change')
+            if isinstance(healing, int) and healing > 0:
+                healing_done_by_attack[attack_id] = healing_done_by_attack.get(attack_id, 0) + healing
+
+    # --- Update AttackUsageStats based on aggregated data ---
+    all_used_attack_ids = attacks_used_by_player['player1'].union(attacks_used_by_player['player2'])
+
+    # Fetch stats objects in bulk for efficiency if possible, or handle individually
+    stats_objects = {stat.attack_id: stat for stat in AttackUsageStats.objects.filter(attack_id__in=all_used_attack_ids)}
+    created_stats_count = 0
+    updated_stats_count = 0
+
+    for attack_id in all_used_attack_ids:
+        try:
+            # Get existing or create new stats object
+            stats = stats_objects.get(attack_id)
+            if not stats:
+                # Ensure attack exists before creating stats for it
+                attack_instance = Attack.objects.get(pk=attack_id)
+                stats, created = AttackUsageStats.objects.get_or_create(attack=attack_instance)
+                if created: created_stats_count += 1
+                stats_objects[attack_id] = stats # Add to cache
+            else:
+                created = False # Already existed
+
+            # Increment times used
+            stats.times_used += 1
+
+            # Add damage/healing totals
+            stats.total_damage_dealt += damage_dealt_by_attack.get(attack_id, 0)
+            stats.total_healing_done += healing_done_by_attack.get(attack_id, 0)
+
+            # Increment win/loss counts
+            is_winner_attack = winner_role and attack_id in attacks_used_by_player.get(winner_role, set())
+            is_loser_attack = loser_role and attack_id in attacks_used_by_player.get(loser_role, set())
+
+            if is_vs_bot:
+                if is_winner_attack: stats.wins_vs_bot += 1
+                if is_loser_attack: stats.losses_vs_bot += 1
+            else: # vs Human
+                if is_winner_attack: stats.wins_vs_human += 1
+                if is_loser_attack: stats.losses_vs_human += 1
+
+            # Update co-occurrence (simplified example - only counts pairs within this battle)
+            # A more robust implementation might require a separate, more complex aggregation step
+            player_role_using_attack = 'player1' if attack_id in attacks_used_by_player['player1'] else 'player2'
+            co_used_attacks_in_battle = attacks_used_by_player[player_role_using_attack] - {attack_id} # Other attacks used by same player
+
+            if not isinstance(stats.co_used_with_counts, dict): stats.co_used_with_counts = {} # Ensure it's a dict
+
+            for other_attack_id in co_used_attacks_in_battle:
+                other_attack_id_str = str(other_attack_id) # JSON keys must be strings
+                stats.co_used_with_counts[other_attack_id_str] = stats.co_used_with_counts.get(other_attack_id_str, 0) + 1
+
+            stats.save()
+            updated_stats_count +=1
+
+        except Attack.DoesNotExist:
+             print(f"  [Stats Update Warning] Attack ID {attack_id} not found. Cannot update its stats.")
+        except Exception as e:
+             print(f"  [Stats Update Error] Failed processing Attack ID {attack_id}: {e}")
+
+    print(f"  [Stats Update] Completed for Battle {battle.id}. Updated {updated_stats_count} stats records ({created_stats_count} created).")
 
 # --- Main Action Logic --- 
 
@@ -13,6 +132,7 @@ def apply_attack(battle: Battle, attacker: User, attack: Attack):
     Returns a list of log entries and whether the battle ended.
     Handles turn switching based on momentum SPENDING.
     Integrates Lua scripting for custom effects based on the new Script model.
+    Updates AttackUsageStats when the battle ends.
     """
     # --- Imports from refactored modules ---
     from .logic import (
@@ -200,6 +320,14 @@ def apply_attack(battle: Battle, attacker: User, attack: Attack):
                      battle.winner = attacker 
                  battle_ended = True
 
+        # --- !!! ADD ATTACK TO USED LIST !!! ---
+        # Add the attack after its initial effects/scripts are processed
+        if attacker_role == 'player1':
+            battle.player1_attacks_used.add(attack)
+        else: # attacker_role == 'player2'
+            battle.player2_attacks_used.add(attack)
+        # ----------------------------------------
+
     # =========================================================
     # --- PHASE 3: END OF CURRENT PLAYER'S TURN EFFECTS --- 
     # =========================================================
@@ -344,50 +472,24 @@ def apply_attack(battle: Battle, attacker: User, attack: Attack):
          battle.last_turn_summary = [] 
     battle.last_turn_summary.extend(log_entries) # Append logs from this turn
     
-    # --- Save Battle State (Moved to end of function) --- 
-    # Only save if state actually changed during the turn OR battle ended
-    if state_changed_this_turn or battle_ended:
-        # --- Award Booster Credits on Battle End ---
-        if battle.status == 'finished' and battle.winner:
-            loser = battle.player1 if battle.winner == battle.player2 else battle.player2
-            winner_credits_earned = 2
-            loser_credits_earned = 1
-            
-            battle.winner.booster_credits += winner_credits_earned
-            loser.booster_credits += loser_credits_earned
-            
-            battle.winner.save(update_fields=['booster_credits'])
-            loser.save(update_fields=['booster_credits'])
-            
-            print(f"    [Battle {battle.id}] Awarded {winner_credits_earned} credits to {battle.winner.username}, {loser_credits_earned} credits to {loser.username}.")
-            # Add log entries for credits?
-            add_log_entry({"source": "system", "text": f"{battle.winner.username} earned {winner_credits_earned} Booster Credits!", "effect_type": "info"})
-            add_log_entry({"source": "system", "text": f"{loser.username} earned {loser_credits_earned} Booster Credit!", "effect_type": "info"})
-        # --- End Award Credits ---
+    # --- Save Battle State FIRST ---
+    try:
+        battle.save() # Save the final battle state (winner, status etc.)
+        print(f"    [Battle {battle.id}] Saved final state for turn {battle.turn_number-1 if battle_ended else battle.turn_number}. Status: {battle.status}, Winner: {battle.winner}")
+    except Exception as e:
+        print(f"!!! ERROR saving battle state for Battle {battle.id}: {e}")
+        # If save fails, we probably shouldn't update stats
+        return log_entries, battle_ended # Return early?
 
-        # --- BEGIN DEBUG LOGGING --- 
-        print(f"    DEBUG: Before save - Battle ID: {{battle.id}}")
-        print(f"    DEBUG: Type of stat_stages_player1: {{type(battle.stat_stages_player1)}}")
-        print(f"    DEBUG: Type of stat_stages_player2: {{type(battle.stat_stages_player2)}}")
-        print(f"    DEBUG: Type of custom_statuses_player1: {{type(battle.custom_statuses_player1)}}")
-        print(f"    DEBUG: Type of custom_statuses_player2: {{type(battle.custom_statuses_player2)}}")
-        print(f"    DEBUG: Type of registered_scripts: {{type(battle.registered_scripts)}}")
-        if isinstance(battle.registered_scripts, list) and battle.registered_scripts:
-            print(f"    DEBUG: Type of first item in registered_scripts: {{type(battle.registered_scripts[0])}}")
-        print(f"    DEBUG: Type of last_turn_summary: {{type(battle.last_turn_summary)}}")
-        if isinstance(battle.last_turn_summary, list) and battle.last_turn_summary:
-            print(f"    DEBUG: Type of first item in last_turn_summary: {{type(battle.last_turn_summary[0])}}")
-            if isinstance(battle.last_turn_summary[0], dict) and 'effect_details' in battle.last_turn_summary[0]:
-                 print(f"    DEBUG: Type of first item's effect_details: {{type(battle.last_turn_summary[0]['effect_details'])}}")
-        # --- END DEBUG LOGGING --- 
-
+    # --- CALL NEW STAT UPDATE FUNCTION *AFTER* SAVING BATTLE ---
+    if battle.status == 'finished':
         try:
-            battle.save()
-            print(f"    [Battle {battle.id}] Saved final state for turn {battle.turn_number-1 if battle_ended else battle.turn_number}. Status: {battle.status}, Winner: {battle.winner}")
-        except Exception as e:
-            print(f"!!! ERROR saving battle state for Battle {battle.id}: {e}")
-            # Add a system log entry? Might be redundant if state is inconsistent
-            # log_entries.append({"source": "system", "text": f"Critical error saving battle state: {e}", "effect_type": "error"})
-            # Consider how to handle save failures - return error? Revert state? For now, log and continue.
+            # Call the function to process logs and update AttackUsageStats
+            update_attack_stats_from_battle_log(battle)
+        except Exception as stat_calc_error:
+            # Log errors during stat calculation but don't fail the main request
+            print(f"!!! ERROR during post-battle stat calculation for Battle {battle.id}: {stat_calc_error}")
+            import traceback
+            traceback.print_exc() # Log full traceback
 
     return log_entries, battle_ended 

@@ -2,7 +2,7 @@ import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import apiClient from '@/services/api';
 import { useAuthStore } from './auth'; // To access user info if needed
-import { fetchMyStats as apiFetchMyStats, fetchLeaderboard as apiFetchLeaderboard } from '@/services/api';
+import { fetchMyStats as apiFetchMyStats, fetchLeaderboard as apiFetchLeaderboard, fetchAttackLeaderboard as apiFetchAttackLeaderboard } from '@/services/api';
 
 export const useGameStore = defineStore('game', () => {
   // --- State --- 
@@ -24,9 +24,12 @@ export const useGameStore = defineStore('game', () => {
   // NEW: Leaderboard State
   const myStats = ref(null);
   const leaderboardData = ref([]);
+  const attackLeaderboardData = ref([]);
   const isLoadingMyStats = ref(false);
   const isLoadingLeaderboard = ref(false);
+  const isLoadingAttackLeaderboard = ref(false);
   const leaderboardError = ref(null);
+  const attackLeaderboardError = ref(null);
 
   // --- Actions --- 
 
@@ -324,13 +327,31 @@ export const useGameStore = defineStore('game', () => {
         return a.username.localeCompare(b.username); // Then alphabetical
       });
     } catch (error) {
-      console.error('Failed to fetch leaderboard:', error.response?.data || error.message);
-      leaderboardError.value = 'Could not load leaderboard.';
+      console.error('Failed to fetch player leaderboard:', error.response?.data || error.message);
+      leaderboardError.value = 'Could not load player leaderboard.';
       leaderboardData.value = [];
     } finally {
       isLoadingLeaderboard.value = false;
     }
   }
+
+  // --- NEW: Action for Attack Leaderboard ---
+  async function fetchAttackLeaderboardData(sortBy = 'used', limit = 50) {
+      isLoadingAttackLeaderboard.value = true;
+      attackLeaderboardError.value = null;
+      try {
+          // Use the imported API function
+          const response = await apiFetchAttackLeaderboard(sortBy, limit);
+          attackLeaderboardData.value = response.data; // Store the fetched data
+      } catch (error) {
+          console.error('Failed to fetch attack leaderboard:', error.response?.data || error.message);
+          attackLeaderboardError.value = 'Could not load attack leaderboard.';
+          attackLeaderboardData.value = [];
+      } finally {
+          isLoadingAttackLeaderboard.value = false;
+      }
+  }
+  // --- END NEW Action ---
 
   // --- Helpers --- 
   function clearMessages() {
@@ -404,9 +425,12 @@ export const useGameStore = defineStore('game', () => {
     // NEW: Leaderboard State Exports
     myStats,
     leaderboardData,
+    attackLeaderboardData,
     isLoadingMyStats,
     isLoadingLeaderboard,
+    isLoadingAttackLeaderboard,
     leaderboardError,
+    attackLeaderboardError,
 
     // NEW: Track outgoing challenges { opponentId: battleId }
     outgoingPendingChallenges,
@@ -424,7 +448,8 @@ export const useGameStore = defineStore('game', () => {
 
     // NEW: Leaderboard Actions Exports
     fetchMyStats, // New action
-    fetchLeaderboard, // New action
+    fetchLeaderboard, // Player leaderboard
+    fetchAttackLeaderboardData, // <-- NEW: Attack leaderboard action
     generateAttacks, // <-- Export updated action
     cancelChallenge, // <-- Export new action
   };
