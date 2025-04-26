@@ -9,7 +9,7 @@
     <div v-if="successMessage && !isLoading" class="success-message">✅ {{ successMessage }}</div>
 
     <form @submit.prevent="handleSubmit" class="attack-generation-form">
-      <div class="form-group">
+      <div class="form-group concept-group">
         <label for="attack-concept">Booster Theme/Concept:</label>
         <input 
           id="attack-concept" 
@@ -30,22 +30,30 @@
           <h3>Generated Attacks Preview:</h3>
           <!-- Desktop Grid -->
           <div class="attack-display-desktop">
-            <AttackGrid
-                :attacks="generatedAttacks"
-                mode="reveal"
-                :revealedIds="revealedAttackIds"
-                @reveal="revealedAttackIds.add($event)"
-                class="generated-attack-display"
-            />
+             <!-- Wrap grid in TransitionGroup -->
+            <TransitionGroup name="card-reveal" tag="div" class="generated-attack-display">
+                <AttackGrid
+                    :attacks="generatedAttacks"
+                    mode="reveal"
+                    :revealedIds="revealedAttackIds"
+                    @reveal="revealedAttackIds.add($event)"
+                    :key="'generated-grid'" 
+                    class="generated-attack-grid" 
+                />
+                 <!-- Add individual card handling for spin? Need to adjust AttackGrid or handle click here -->
+                 <!-- Let's try applying class based on revealedIds directly in AttackGrid if possible, -->
+                 <!-- or add a wrapper here if AttackGrid doesn't support itemClass -->
+                 <!-- Simpler for now: Trigger reveal logic, CSS targets revealed cards -->
+             </TransitionGroup>
           </div>
            <!-- Mobile List -->
           <div class="attack-display-mobile">
+              <!-- Add TransitionGroup here too if desired -->
               <AttackListMobile 
                   :attacks="generatedAttacks" 
                   mode="display"
               />
           </div>
-          <!-- Removed old grid and transition -->
           <p class="preview-footer">These attacks have been added to your collection.</p>
       </div>
 
@@ -105,7 +113,6 @@
 import { computed, ref, onMounted } from 'vue';
 import { useGameStore } from '@/stores/game';
 import { useAuthStore } from '@/stores/auth';
-import AttackCardDisplay from '@/components/AttackCardDisplay.vue';
 import AttackGrid from '@/components/AttackGrid.vue';
 import AttackListMobile from '@/components/AttackListMobile.vue';
 
@@ -292,6 +299,7 @@ onMounted(async () => {
     width: 100%;
     border-top: var(--border-width) dashed var(--color-border);
     padding-top: 15px;
+    overflow: hidden; /* Prevent overflow during animations */
 }
 
 .generated-attacks-preview h3 {
@@ -374,6 +382,62 @@ onMounted(async () => {
   background-color: rgba(53, 208, 104, 0.1);
   color: var(--color-hp-high);
   border-color: var(--color-hp-high);
+}
+
+/* Make concept input wider */
+.concept-group {
+  max-width: 600px; /* Increase max-width */
+}
+
+#attack-concept {
+    /* Ensure input uses available width if not default */
+    width: 100%; 
+}
+
+/* Generated Attacks Preview and Animations */
+.generated-attack-display {
+    /* Ensure the container for TransitionGroup behaves as expected */
+    position: relative; 
+}
+
+/* Card Reveal Transition (Fade-in + Slight Scale) */
+.card-reveal-enter-active,
+.card-reveal-leave-active {
+  transition: all 0.5s ease;
+}
+.card-reveal-enter-from,
+.card-reveal-leave-to {
+  opacity: 0;
+  transform: scale(0.95);
+}
+/* Stagger effect */
+.card-reveal-enter-active {
+    transition-delay: calc(0.08s * var(--stagger-index, 0)); /* Needs index passed */
+    /* Note: Passing index might require modifying AttackGrid or how items are rendered */
+}
+
+
+/* Card Spin Animation on Reveal */
+/* Apply this class conditionally inside AttackGrid or AttackCardDisplay when revealed */
+/* We target based on the presence of the reveal overlay being hidden */
+:deep(.attack-grid-item .attack-card-content) {
+    transition: transform 0.6s;
+    transform-style: preserve-3d;
+}
+
+/* This targets the card *after* the overlay is removed (isRevealed becomes true) */
+:deep(.attack-grid-item .is-revealed .attack-card-content) {
+  /* Animation applied when revealed */
+  animation: spin 0.6s ease-out;
+}
+
+@keyframes spin {
+  from {
+    transform: rotateY(0deg);
+  }
+  to {
+    transform: rotateY(360deg);
+  }
 }
 
 </style> 
