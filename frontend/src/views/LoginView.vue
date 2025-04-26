@@ -1,5 +1,6 @@
 <template>
   <div class="auth-container">
+    <LogoGengo />
     <h2>Login</h2>
     <form @submit.prevent="handleLogin" class="auth-form">
       <div class="form-group">
@@ -21,6 +22,7 @@
 import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
+import LogoGengo from '@/components/LogoGengo.vue';
 
 const username = ref('');
 const password = ref('');
@@ -55,7 +57,7 @@ const handleLogin = async () => {
 <style scoped>
 .auth-container {
     max-width: 350px;
-    margin: 3rem auto;
+    margin: 2rem auto;
     padding: var(--panel-padding);
     border: var(--border-width) solid var(--color-border);
     border-radius: 0;
@@ -76,16 +78,13 @@ h2 {
     color: var(--color-text);
     font-weight: normal;
     box-shadow: inset 0 0 0 1px var(--color-panel-bg);
+    margin-bottom: 15px;
 }
 
 .auth-form {
     display: flex;
     flex-direction: column;
     gap: 15px; /* Gap between form elements */
-}
-
-.form-group {
-    /* No extra styles needed, just contains label+input */
 }
 
 label {
@@ -97,11 +96,6 @@ label {
     text-transform: uppercase;
 }
 
-/* Assume input uses global styles from main.css */
-input[type="text"],
-input[type="password"] {
-    /* Inherit from main.css */
-}
 
 /* Assume button uses global .btn styles */
 .btn {
