@@ -9,9 +9,17 @@ const props = defineProps({
   showDeleteButton: {
     type: Boolean,
     default: false
+  },
+  isFavorite: {
+    type: Boolean,
+    default: false
+  },
+  showFavoriteButton: {
+    type: Boolean,
+    default: false
   }
 });
-const emit = defineEmits(['delete-clicked']);
+const emit = defineEmits(['delete-clicked', 'toggle-favorite']);
 
 // You could add computed properties here if needed for display logic,
 // e.g., formatting descriptions or determining icons.
@@ -29,6 +37,20 @@ const displayEmoji = computed(() => props.attack.emoji || '⚔️');
       title="Delete Attack"
     >
       &times;
+    </button>
+
+    <!-- Favorite Button (Bottom Left) -->
+    <button
+      v-if="showFavoriteButton"
+      @click.stop="$emit('toggle-favorite')" 
+      class="favorite-button"
+      :class="{ 'is-favorited': isFavorite }"
+      :title="isFavorite ? 'Unfavorite Attack' : 'Favorite Attack'"
+    >
+
+      <!-- Always present, visibility controlled by CSS -->
+      <span class="star-icon star-empty">☆</span>
+      <span class="star-icon star-filled">★</span>
     </button>
 
     <!-- Top Right Cost Display -->
@@ -125,27 +147,118 @@ h4 {
   position: absolute;
   top: 1px;
   left: 1px;
-  background-color: var(--color-accent);
-  color: var(--color-panel-bg);
-  border: 1px solid var(--color-border);
+  /* background-color: #888; */ /* Muted gray background */
+  background-color: transparent; /* Make transparent */
+  color: #888; /* Muted gray color initially */
+  /* border: 1px solid #555; */ /* Darker border */
+  border: none; /* Remove border */
   border-radius: 0;
-  width: 18px;
-  height: 18px;
-  font-size: 14px;
-  line-height: 16px;
+  width: 16px; /* Slightly smaller */
+  height: 16px; /* Slightly smaller */
+  font-size: 12px; /* Slightly smaller symbol */
+  line-height: 14px; /* Adjust line height */
   text-align: center;
   padding: 0;
   cursor: pointer;
   z-index: 2;
-  box-shadow: 1px 1px 0px var(--color-border);
+  /* box-shadow: 1px 1px 0px var(--color-border); */ /* Removed shadow */
+  box-shadow: none;
   transition: background-color 0.2s ease, transform 0.1s ease;
 }
 
 .delete-button:hover {
-  background-color: #c0392b;
+  /* background-color: #a04040; */ /* Muted red on hover */
+  background-color: transparent; /* Keep transparent */
+  color: #c0392b; /* Make color accent red on hover */
+  transform: scale(1.1); /* Add slight scale on hover */
 }
 .delete-button:active {
-   transform: translate(1px, 1px);
-   box-shadow: none;
+   transform: translate(1px, 1px) scale(1.1); /* Keep scale during active click */
+   /* box-shadow: none; */ /* Already none */
 }
+
+/* --- Favorite Button Styles --- */
+.favorite-button {
+  position: absolute;
+  bottom: 3px; 
+  left: 3px;
+  background-color: transparent;
+  border: none;
+  font-size: 1.4em; /* Base size for dimensions */
+  width: 1em; /* Size based on font-size */
+  height: 1em; /* Size based on font-size */
+  padding: 0;
+  cursor: pointer;
+  z-index: 2;
+  box-shadow: none;
+  outline: none; /* Remove focus outline */
+}
+
+/* Individual star icons */
+.favorite-button .star-icon {
+  background-color: transparent;
+  position: absolute; /* Allow overlap */
+  top: 0;
+  left: 0;
+  width: 100%; /* Fill the button */
+  height: 100%; /* Fill the button */
+  line-height: 1; /* Center vertically */
+  text-align: center; /* Center horizontally */
+  transition: opacity 0.2s ease, color 0.2s ease, transform 0.1s ease;
+  color: #888; /* Default initial color */
+}
+
+.favorite-button:hover {
+  background-color: transparent;
+}
+
+/* Filled star hidden by default */
+.favorite-button .star-filled {
+  opacity: 0;
+}
+
+/* --- State Logic --- */
+
+/* When favorited: show filled star (yellow), hide empty */
+.favorite-button.is-favorited .star-empty {
+  opacity: 0;
+}
+.favorite-button.is-favorited .star-filled {
+  opacity: 1;
+  color: #f1c40f; /* Filled star color */
+}
+
+/* --- Hover Logic --- */
+
+/* When hovering NOT favorited: hide empty, show filled (gold) */
+.favorite-button:not(.is-favorited):hover .star-empty {
+  opacity: 0;
+  transform: scale(1.1); /* Scale effect on hover */
+}
+.favorite-button:not(.is-favorited):hover .star-filled {
+  opacity: 1;
+  color: #f39c12; /* Hover color */
+  transform: scale(1.5); /* Scale effect on hover */
+}
+
+/* When hovering IS favorited: keep filled shown, change color (orange), scale */
+.favorite-button.is-favorited:hover .star-filled {
+  color: #e67e22; /* Slightly different hover for favorited */
+  transform: scale(1.5);
+}
+
+/* OLD HOVER/FAVORITED RULES - REMOVE */
+/*
+.favorite-button:hover {
+  color: #f39c12; 
+  transform: scale(1.1);
+}
+.favorite-button.is-favorited {
+  color: #f1c40f; 
+}
+.favorite-button.is-favorited:hover {
+  color: #e67e22; 
+}
+*/
+/* --- END Favorite Button Styles --- */
 </style> 

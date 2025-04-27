@@ -123,3 +123,13 @@ export const fetchMyAttacks = () => apiClient.get('/game/attacks/my-attacks/');
 export const fetchMyStats = () => apiClient.get('/users/me/stats/');
 export const fetchLeaderboard = () => apiClient.get('/users/leaderboard/');
 export const fetchAttackLeaderboard = (sortBy = 'used', limit = 50) => apiClient.get(`/game/leaderboard/attacks/?sort=${sortBy}&limit=${limit}`);
+
+// --- NEW: Profile Picture Generation --- 
+export const generateProfilePicture = async () => {
+    // The endpoint returns the updated UserRead object on success
+    const response = await apiClient.post('/users/me/generate-profile-picture');
+    return response.data; // Return the updated user data
+};
+
+// --- NEW: Game Configuration --- 
+export const fetchGameConfig = () => apiClient.get('/game/config/');

@@ -3,6 +3,7 @@
 from rest_framework import serializers
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
+import json
 
 from .models import User
 # Import AttackSerializer locally where needed to avoid potential circular imports at module level
@@ -31,7 +32,6 @@ class UserRegisterSerializer(serializers.ModelSerializer):
         user = User.objects.create(
             username=validated_data['username'],
             email=validated_data.get('email', ''), # Handle optional email
-            booster_credits=12 # NEW: Set initial credits
         )
         user.set_password(validated_data['password'])
         # Maybe assign default stats/level here if not done in model defaults
@@ -40,10 +40,16 @@ class UserRegisterSerializer(serializers.ModelSerializer):
         return user
 
 class BasicUserSerializer(serializers.ModelSerializer):
-    """A very basic serializer for listing users"""
+    """A basic serializer for listing users, now including profile picture."""
     class Meta:
         model = User
-        fields = ('id', 'username', 'level', 'allow_bot_challenges')
+        fields = (
+            'id', 
+            'username', 
+            'level', 
+            'allow_bot_challenges', 
+            'profile_picture_base64'
+        )
 
 class UserProfileSerializer(serializers.ModelSerializer):
     # Use a SerializerMethodField to avoid circular import
@@ -73,12 +79,16 @@ class UserSerializer(serializers.ModelSerializer):
             'id', 'username', 'level', 
             'hp', 'attack', 'defense', 'speed',
             'attacks', 'selected_attacks', 'booster_credits',
-            'allow_bot_challenges'
+            'allow_bot_challenges', 'last_seen', # Added last_seen
+            'stats', # Added stats
+            'profile_picture_base64', 'profile_picture_prompt' # Use base64 field
         )
         read_only_fields = (
             'id', 'username', 'level', 
             'hp', 'attack', 'defense', 'speed',
-            'attacks', 'selected_attacks', 'booster_credits'
+            'attacks', 'selected_attacks', 'booster_credits', 'last_seen', 'stats',
+            'profile_picture_prompt' # Prompt usually read-only for client
+            # profile_picture_base64 is implicitly read-only as it's not listed for update
         )
 
     def get_attacks(self, user_instance):
@@ -168,8 +178,16 @@ class UserStatsSerializer(serializers.ModelSerializer):
 
 class LeaderboardUserSerializer(serializers.ModelSerializer):
     """Serializer for displaying users on the public leaderboard."""
-    total_wins = serializers.SerializerMethodField()
+    # total_wins = serializers.SerializerMethodField() # REMOVED - Replaced by detailed stats
     selected_attacks = serializers.SerializerMethodField(read_only=True) # User's current loadout
+
+    # --- RE-ADD STAT FIELDS --- 
+    wins_vs_human = serializers.SerializerMethodField()
+    losses_vs_human = serializers.SerializerMethodField()
+    wins_vs_bot = serializers.SerializerMethodField()
+    losses_vs_bot = serializers.SerializerMethodField()
+    total_damage_dealt = serializers.SerializerMethodField()
+    # --- END RE-ADD STAT FIELDS ---
 
     class Meta:
         model = User
@@ -177,13 +195,48 @@ class LeaderboardUserSerializer(serializers.ModelSerializer):
             'id', 
             'username', 
             'level', 
-            'total_wins', 
             'selected_attacks',
+            # --- ADDED new stat fields to output ---
+            'wins_vs_human',
+            'losses_vs_human',
+            'wins_vs_bot',
+            'losses_vs_bot',
+            'total_damage_dealt',
+            # --- END ADDED ---
         )
 
-    def get_total_wins(self, user_instance):
-        # Reuse the method from the User model
-        return user_instance.get_total_wins()
+    # def get_total_wins(self, user_instance):
+    #     # Reuse the method from the User model
+    #     return user_instance.get_total_wins()
+
+    # --- RE-ADD Methods to get stats safely from JSON --- 
+    def get_user_stat(self, obj, key, default=0):
+        """Helper to safely get stats from user.stats JSON field."""
+        stats_data = getattr(obj, 'stats', {})
+        if not isinstance(stats_data, dict):
+            # Attempt to load if it's a string, otherwise return default
+            try:
+                loaded_stats = json.loads(stats_data) if isinstance(stats_data, str) else {}
+                stats_data = loaded_stats if isinstance(loaded_stats, dict) else {}
+            except json.JSONDecodeError:
+                stats_data = {}
+        return stats_data.get(key, default)
+
+    def get_wins_vs_human(self, obj):
+        return self.get_user_stat(obj, 'wins_vs_human')
+
+    def get_losses_vs_human(self, obj):
+        return self.get_user_stat(obj, 'losses_vs_human')
+
+    def get_wins_vs_bot(self, obj):
+        return self.get_user_stat(obj, 'wins_vs_bot')
+
+    def get_losses_vs_bot(self, obj):
+        return self.get_user_stat(obj, 'losses_vs_bot')
+
+    def get_total_damage_dealt(self, obj):
+        return self.get_user_stat(obj, 'total_damage_dealt')
+    # --- END RE-ADD Methods --- 
 
     def get_selected_attacks(self, user_instance):
         # Reuse logic similar to UserSerializer or import AttackSerializer

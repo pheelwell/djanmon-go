@@ -28,9 +28,33 @@ class GameConfiguration(models.Model):
 
 # --- NEW: Script Model ---
 class Script(models.Model):
+    WHO_CHOICES = [
+        ('ME', 'Me (Original Attacker)'),
+        ('ENEMY', 'Enemy (Original Target)'),
+        ('ANY', 'Any Player (Current Actor)'),
+        # ('PLAYER1', 'Player 1 (Absolute)'), # Maybe add later if needed
+        # ('PLAYER2', 'Player 2 (Absolute)'), # Maybe add later if needed
+    ]
+    WHEN_CHOICES = [
+        ('ON_USE', 'On Attack Use (Immediate, Once)'),
+        ('BEFORE_TURN', 'Before Turn Start'),
+        ('AFTER_TURN', 'After Turn End'),
+        ('BEFORE_ATTACK', 'Before Attack Action'),
+        ('AFTER_ATTACK', 'After Attack Action'),
+    ]
+    DURATION_CHOICES = [
+        ('ONCE', 'Once (Next time conditions met)'),
+        ('PERSISTENT', 'Persistent (Until unregistered)'),
+        # ('EVERY', 'Every Time (Synonym for Persistent?)') # Let's stick to PERSISTENT for now
+    ]
+
     name = models.CharField(max_length=100, unique=True, help_text="Unique name for identifying the script in admin.")
     description = models.TextField(blank=True, help_text="Optional description of what the script does.")
     lua_code = models.TextField("Lua Code", help_text="The actual Lua script content.")
+    # --- NEW Fields for Frontend Display --- 
+    icon_emoji = models.CharField(max_length=5, blank=True, null=True, default="⚙️", help_text="Emoji to represent this script in the UI.")
+    tooltip_description = models.CharField(max_length=150, blank=True, help_text="Short description shown on hover in the UI.")
+    # --- END NEW Fields --- 
     
     # --- Link back to the Attack --- 
     attack = models.ForeignKey(
@@ -40,33 +64,41 @@ class Script(models.Model):
         help_text="The Attack this script is associated with."
     )
     
-    # --- Trigger Points --- 
-    trigger_on_attack = models.BooleanField(
-        "Trigger On Attack Use?", default=False, 
-        help_text="Runs once immediately when the associated Attack is used."
+    # --- NEW Trigger System ---
+    trigger_who = models.CharField(
+        max_length=10, choices=WHO_CHOICES, default='ENEMY',
+        help_text="Which player relative to the attack use triggers the script? 'ME'=Original Attacker, 'ENEMY'=Original Target, 'ANY'=Current Actor."
     )
-    trigger_before_attacker_turn = models.BooleanField(
-        "Trigger Before Attacker Turn?", default=False, 
-        help_text="If persistent, runs before the original attacker takes their turn."
+    trigger_when = models.CharField(
+        max_length=15, choices=WHEN_CHOICES, default='AFTER_TURN',
+        help_text="When does the script trigger relative to turns or attacks?"
     )
-    trigger_after_attacker_turn = models.BooleanField(
-        "Trigger After Attacker Turn?", default=False, 
-        help_text="If persistent, runs after the original attacker finishes their turn."
+    trigger_duration = models.CharField(
+        max_length=10, choices=DURATION_CHOICES, default='PERSISTENT',
+        help_text="How long does the script last? 'ONCE' triggers the next time, 'PERSISTENT' triggers repeatedly until unregistered."
     )
-    trigger_before_target_turn = models.BooleanField(
-        "Trigger Before Target Turn?", default=False, 
-        help_text="If persistent, runs before the original target takes their turn."
-    )
-    trigger_after_target_turn = models.BooleanField(
-        "Trigger After Target Turn?", default=False, 
-        help_text="If persistent, runs after the original target finishes their turn."
-    )
-    
+
+    # --- OLD Trigger Points (To be removed by migration) ---
+    # trigger_on_attack = models.BooleanField(...)
+    # trigger_before_attacker_turn = models.BooleanField(...)
+    # trigger_after_attacker_turn = models.BooleanField(...)
+    # trigger_before_target_turn = models.BooleanField(...)
+    # trigger_after_target_turn = models.BooleanField(...)
+    # --- End OLD Trigger Points ---
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return self.name
+        return f"{self.name} ({self.get_trigger_who_display()}, {self.get_trigger_when_display()}, {self.get_trigger_duration_display()})"
+
+    def save(self, *args, **kwargs):
+        # Ensure ON_USE is always ONCE
+        if self.trigger_when == 'ON_USE':
+            self.trigger_duration = 'ONCE'
+            self.trigger_who = 'ME' # 'ON_USE' applies immediately for the user of the attack
+        super().save(*args, **kwargs)
+
 # --- END Script Model ---
 
 
@@ -75,6 +107,7 @@ class Attack(models.Model):
     description = models.TextField(blank=True)
     emoji = models.CharField(max_length=5, blank=True, null=True, help_text="Optional emoji icon for the attack")
     momentum_cost = models.PositiveIntegerField(default=1, help_text="Base momentum cost before speed modification")
+    is_favorite = models.BooleanField(default=False, db_index=True, help_text="Whether the user marked this attack as a favorite.")
     
     # --- NEW: Link to Creator ---
     creator = models.ForeignKey(

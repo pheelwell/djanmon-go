@@ -106,6 +106,37 @@ const opponentCustomStatuses = computed(() => {
     return displayedBattleState.value[fieldName] || {};
 });
 
+// --- Computed: Detailed Registered Scripts (for easier filtering) ---
+const detailedRegisteredScripts = computed(() => {
+    return displayedBattleState.value?.detailed_registered_scripts || [];
+});
+
+const userTargetedScripts = computed(() => {
+    if (!userPlayerRole.value) return [];
+    return detailedRegisteredScripts.value.filter(script => {
+        const triggerWho = script.trigger_who;
+        const originalAttacker = script.original_attacker_role;
+        // Primarily target user if: Trigger was ME and user was original attacker OR Trigger was ENEMY and user was original target
+        return (triggerWho === 'ME' && originalAttacker === userPlayerRole.value) || 
+               (triggerWho === 'ENEMY' && originalAttacker !== userPlayerRole.value); // Assuming binary player roles
+    });
+});
+
+const opponentTargetedScripts = computed(() => {
+    if (!userPlayerRole.value) return [];
+    return detailedRegisteredScripts.value.filter(script => {
+        const triggerWho = script.trigger_who;
+        const originalAttacker = script.original_attacker_role;
+        // Primarily target opponent if: Trigger was ME and user was NOT original attacker OR Trigger was ENEMY and user WAS original attacker
+        return (triggerWho === 'ME' && originalAttacker !== userPlayerRole.value) || 
+               (triggerWho === 'ENEMY' && originalAttacker === userPlayerRole.value);
+    });
+});
+
+const anyTargetedScripts = computed(() => {
+    return detailedRegisteredScripts.value.filter(script => script.trigger_who === 'ANY');
+});
+
 // --- Momentum Calculation (Refactored for Active Player) ---
 const currentMomentumP1 = computed(() => displayedBattleState.value?.current_momentum_player1 ?? 0);
 const currentMomentumP2 = computed(() => displayedBattleState.value?.current_momentum_player2 ?? 0);
@@ -434,16 +465,28 @@ watch(() => battle.value, (newBattleState) => {
       <div class="main-display">
 
           <!-- User Info Panel -->
-          <PlayerInfoCard
-              :player="userPlayer"
-              :currentHp="userCurrentHp"
-                :maxHp="userPlayer?.hp"
-              :statStages="userStatStages"
-              :customStatuses="userCustomStatuses"
-              playerType="user"
-              :isCurrentUser="true"
-                class="player-info user panel"
-            />
+          <div class="player-display-wrapper user-side">
+              <div class="player-avatar-large">
+                   <img 
+                      v-if="userPlayer?.profile_picture_base64" 
+                      :src="'data:image/png;base64,' + userPlayer.profile_picture_base64" 
+                      alt="Profile Picture" 
+                      class="player-avatar-img"
+                   />
+                   <div v-else class="player-avatar-placeholder">?</div>
+              </div>
+              <PlayerInfoCard
+                  :player="userPlayer"
+                  :currentHp="userCurrentHp"
+                  :maxHp="userPlayer?.hp"
+                  :statStages="userStatStages"
+                  :customStatuses="userCustomStatuses"
+                  playerType="user"
+                  :isCurrentUser="true"
+                  class="player-info user panel"
+              />
+          </div>
+
           <!-- Momentum Display Panel -->
           <div class="momentum-display panel">
               <div class="momentum-label">MOMENTUM</div>
@@ -458,18 +501,57 @@ watch(() => battle.value, (newBattleState) => {
                  <!-- Cost Preview Block -->
                  <div v-if="isPreviewActive" class="momentum-cost-preview" :style="costPreviewStyle"></div>
               </div>
+              <!-- NEW: Registered Scripts Display -->
+              <div class="registered-scripts-display">
+                  <div class="scripts-user-side">
+                     <span v-for="script in userTargetedScripts" 
+                            :key="script.registration_id" 
+                            class="script-icon-wrapper" 
+                            :data-tooltip="script.tooltip_description">
+                          {{ script.icon_emoji || '⚙️' }}
+                      </span>
+                  </div>
+                  <div class="scripts-shared-side">
+                     <span v-for="script in anyTargetedScripts" 
+                            :key="script.registration_id" 
+                            class="script-icon-wrapper" 
+                            :data-tooltip="script.tooltip_description">
+                          {{ script.icon_emoji || '⚙️' }}
+                      </span>
+                  </div>
+                  <div class="scripts-opponent-side">
+                     <span v-for="script in opponentTargetedScripts" 
+                            :key="script.registration_id" 
+                            class="script-icon-wrapper" 
+                            :data-tooltip="script.tooltip_description">
+                          {{ script.icon_emoji || '⚙️' }}
+                      </span>
+                  </div>
+              </div>
+              <!-- END: Registered Scripts Display -->
           </div>
 
           <!-- Opponent Info Panel -->
-           <PlayerInfoCard
-              :player="opponentPlayer"
-              :currentHp="opponentCurrentHp"
-              :maxHp="opponentPlayer?.hp" 
-              :statStages="opponentStatStages"
-              :customStatuses="opponentCustomStatuses"
-              playerType="opponent"
-              class="player-info opponent panel"
-          />
+           <div class="player-display-wrapper opponent-side">
+              <div class="player-avatar-large">
+                   <img 
+                      v-if="opponentPlayer?.profile_picture_base64" 
+                      :src="'data:image/png;base64,' + opponentPlayer.profile_picture_base64" 
+                      alt="Profile Picture" 
+                      class="player-avatar-img"
+                   />
+                   <div v-else class="player-avatar-placeholder">?</div>
+              </div>
+              <PlayerInfoCard
+                  :player="opponentPlayer"
+                  :currentHp="opponentCurrentHp"
+                  :maxHp="opponentPlayer?.hp" 
+                  :statStages="opponentStatStages"
+                  :customStatuses="opponentCustomStatuses"
+                  playerType="opponent"
+                  class="player-info opponent panel"
+              />
+           </div>
       </div>
 
       <!-- Bottom Panels Area -->
@@ -680,25 +762,68 @@ watch(() => battle.value, (newBattleState) => {
 .main-display {
     display: flex;
     justify-content: space-between;
-    align-items: stretch; 
-    gap: calc(var(--element-gap) * 2); 
-    margin-top: var(--element-gap); /* Add margin above */
-    margin-bottom: var(--element-gap); /* Add margin below */
+    align-items: stretch; /* Change alignment */
+    gap: calc(var(--element-gap) * 1); /* Reduce gap slightly */
+    margin-top: var(--element-gap);
+    margin-bottom: var(--element-gap);
+}
+
+/* NEW: Player Display Wrapper */
+.player-display-wrapper {
+    display: flex;
+    align-items: flex-start; /* Align items to the top */
+    gap: 10px;
+    flex: 1 1 35%; /* Adjust flex basis */
+    min-width: 220px; /* Increase min-width */
+}
+
+/* NEW: Styles for the large avatar */
+.player-avatar-large {
+    width: 80px; /* Much larger size */
+    height: 80px;
+    flex-shrink: 0; /* Don't shrink the avatar */
+    background-color: var(--color-background-mute);
+    border: var(--border-width) solid var(--color-border);
+    box-shadow: 2px 2px 0px var(--color-border); /* Pixel shadow */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden;
+}
+
+.player-avatar-img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    image-rendering: pixelated;
+}
+
+.player-avatar-placeholder {
+    font-size: 3em; /* Larger placeholder */
+    color: var(--color-text-muted);
+    font-family: var(--font-primary);
 }
 
 .player-info {
-    flex: 1 1 30%; /* Allow shrinking/growing */
-    min-width: 200px; /* Prevent extreme squishing */
+    flex: 1; /* Allow card to take remaining space */
+    /* Removed min-width from here as wrapper handles it */
+}
+
+/* Adjust opponent wrapper order if needed */
+.player-display-wrapper.opponent-side {
+    flex-direction: row-reverse; /* Place avatar on the right */
 }
 
 .momentum-display {
-    flex: 1 1 25%; 
+    flex: 1 1 20%; /* Adjust flex basis */
     text-align: center;
     display: flex;
     flex-direction: column;
-    justify-content: center; 
+    justify-content: flex-start; /* Align content to top */
     min-width: 150px;
-    gap: 8px; /* Add gap for spacing */
+    gap: 8px;
+    padding-top: 10px; /* Add padding to align vertically */
+    padding-bottom: 10px;
 }
 
 .momentum-label {
@@ -872,21 +997,77 @@ watch(() => battle.value, (newBattleState) => {
 
     .main-display {
         order: 1;
-        flex-shrink: 0; /* Don't shrink player info area */
-        padding: 5px 8px; /* Horizontal padding */
+        flex-shrink: 0;
+        padding: 5px 8px;
         display: flex;
-        flex-direction: column;
-        gap: 5px; /* Internal gap for player/momentum */
+        flex-direction: column; /* Stack vertically */
+        gap: 5px;
     }
-    /* Ensure player-info order is correct within main-display */
-    .main-display .player-info { order: initial; margin: 0; flex-basis: auto; min-width: initial; } /* Reset overrides */
-    .main-display .player-info.opponent { order: 1; }
-    .main-display .momentum-display { order: 2; padding: 5px; margin: 0; flex-basis: auto; min-width: initial; } /* Reset overrides */
-    .main-display .player-info.user { order: 3; }
 
+    /* NEW: Mobile Wrapper Layout */
+    .player-display-wrapper {
+        display: flex;
+        align-items: center; /* Center items vertically */
+        gap: 8px;
+        width: 100%;
+        flex-basis: auto; /* Reset flex basis */
+        min-width: auto; /* Reset min-width */
+        flex-direction: row; /* Explicitly set row for mobile override */
+    }
+    .player-display-wrapper.user-side { order: 3; } /* User at bottom */
+    .player-display-wrapper.opponent-side { 
+        order: 1; /* Opponent at top */
+        flex-direction: row-reverse; /* Keep avatar on right for opponent */
+    }
 
-    /* No longer need specific layout rules for bottom-panels wrapper */
-    .bottom-panels { display: contents; } /* Make wrapper 'invisible' to flex layout */
+    /* NEW: Mobile Avatar Size */
+    .player-avatar-large {
+        width: 50px; /* Smaller on mobile */
+        height: 50px;
+        box-shadow: 1px 1px 0px var(--color-border); /* Smaller shadow */
+    }
+    .player-avatar-placeholder {
+        font-size: 1.8em; /* Smaller placeholder */
+    }
+
+    .player-info {
+        flex: 1; /* Take remaining space */
+    }
+
+    .momentum-display {
+        order: 2; /* Momentum in the middle */
+        padding: 5px;
+        margin: 0;
+        flex-basis: auto;
+        min-width: initial;
+        background-color: var(--color-panel-bg); /* Give momentum own panel bg on mobile */
+        border: var(--border-width) solid var(--color-border);
+        box-shadow: inset 0 0 0 2px var(--color-bg), 3px 3px 0px var(--color-border);
+    }
+    
+    /* Remove individual panel styling from player cards on mobile, wrapper handles it implicitly */
+    .player-info.panel {
+        background-color: var(--color-panel-bg);
+        border: var(--border-width) solid var(--color-border);
+        box-shadow: inset 0 0 0 2px var(--color-bg), 3px 3px 0px var(--color-border);
+        padding: 8px;
+    }
+
+    /* Restore panel styles to momentum display for mobile */
+    .main-display .momentum-display {
+        background-color: var(--color-panel-bg) !important;
+        border: var(--border-width) solid var(--color-border) !important;
+        box-shadow: inset 0 0 0 2px var(--color-bg), 3px 3px 0px var(--color-border) !important;
+        padding: 5px !important;
+    }
+    
+    /* Remove panel styles from player-info directly */
+    .player-info.panel {
+        background-color: var(--color-panel-bg);
+        border: var(--border-width) solid var(--color-border);
+        box-shadow: inset 0 0 0 2px var(--color-bg), 3px 3px 0px var(--color-border);
+        padding: 8px;
+    }
 
     .battle-log {
         order: 2; /* After main display */
@@ -1091,4 +1272,62 @@ watch(() => battle.value, (newBattleState) => {
     border-radius: 0; 
 }
 
+/* NEW: Registered Scripts Display Styles */
+.registered-scripts-display {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 8px; /* Space below momentum bar */
+    min-height: 24px; /* Ensure it has some height */
+    padding: 0 5px; /* Add some horizontal padding */
+}
+
+.scripts-user-side,
+.scripts-shared-side,
+.scripts-opponent-side {
+    display: flex;
+    gap: 4px; /* Space between icons */
+    align-items: center;
+}
+
+.scripts-user-side { justify-content: flex-start; flex: 1; }
+.scripts-shared-side { justify-content: center; flex: 0; }
+.scripts-opponent-side { justify-content: flex-end; flex: 1; }
+
+.script-icon-wrapper {
+    font-size: 1.2em; /* Adjust size as needed */
+    cursor: default; /* Indicate hover */
+    position: relative; /* Needed for tooltip positioning */
+    display: inline-block; /* Allows margin/padding */
+}
+
+/* Simple CSS Tooltip */
+.script-icon-wrapper::before { 
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: 100%; /* Position above the icon */
+    left: 50%;
+    transform: translateX(-50%) translateY(-5px); /* Center and add slight gap */
+    background-color: rgba(0, 0, 0, 0.85);
+    color: #fff;
+    padding: 4px 8px;
+    border-radius: 0; /* Match pixel style */
+    font-size: 0.8em;
+    white-space: nowrap;
+    z-index: 10;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.2s ease, visibility 0s linear 0.2s;
+    pointer-events: none; /* Don't let tooltip block hover */
+    font-family: var(--font-primary); /* Use primary font */
+}
+
+.script-icon-wrapper:hover::before {
+    opacity: 1;
+    visibility: visible;
+    transition-delay: 0.3s; /* Slight delay before showing */
+}
+/* --- End Registered Scripts Styles --- */
+
+/* Ensure panel overrides apply on mobile too */
 </style> 

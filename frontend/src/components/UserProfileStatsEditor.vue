@@ -59,14 +59,24 @@ const isValid = computed(() => {
 
 // --- Methods ---
 const initializeStats = () => {
-    if (user.value) {
-        hp.value = user.value.hp || 100;
-        attack.value = user.value.attack || 100;
-        defense.value = user.value.defense || 100;
-        speed.value = user.value.speed || 100;
+    // GUARD: Check if user exists before accessing properties
+    if (user.value && typeof user.value === 'object') { 
+        console.log("Initializing stats editor with user:", user.value);
+        hp.value = user.value.hp ?? 100;
+        attack.value = user.value.attack ?? 100;
+        defense.value = user.value.defense ?? 100;
+        speed.value = user.value.speed ?? 100;
+    } else {
+        // Handle case where user is null or not an object (e.g., during initial load)
+        console.log("Initializing stats editor - User not available yet.");
+        hp.value = 100; // Set defaults
+        attack.value = 100;
+        defense.value = 100;
+        speed.value = 100;
     }
     statsChanged.value = false;
-    saveError.value = null;
+    // Reset error directly from the store ref if possible, or manage locally
+    if (statsUpdateError) statsUpdateError.value = null;
 };
 
 const calculateBarWidth = (barElement) => {
@@ -170,7 +180,7 @@ onMounted(() => {
 // Re-initialize if the user data changes in the store (e.g., after login)
 watch(user, () => {
     initializeStats();
-}, { immediate: true }); // immediate might be redundant with onMounted
+});
 
 // Define emits
 const emit = defineEmits(['close']);
@@ -377,11 +387,6 @@ const saveButtonText = computed(() => {
     gap: 10px;
 }
 
-/* Apply base btn styles, assume they exist globally */
-.btn {
-    /* Assuming base styles are in main.css or similar */
-}
-
 .btn-secondary {
      background-color: var(--color-log-system);
      color: var(--color-bg);
@@ -392,8 +397,5 @@ const saveButtonText = computed(() => {
     color: var(--color-bg);
 }
 
-.btn-primary {
-    /* Base theme button uses accent-secondary, which is fine */
-}
 
 </style> 

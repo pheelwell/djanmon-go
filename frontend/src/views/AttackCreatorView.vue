@@ -38,7 +38,10 @@
                     :revealedIds="revealedAttackIds"
                     @reveal="revealedAttackIds.add($event)"
                     :key="'generated-grid'" 
-                    class="generated-attack-grid" 
+                    class="generated-attack-grid"
+                    :showFavoriteButton="true" 
+                    :favoriteAttackIds="favoriteAttackIdsSet"
+                    @toggleFavorite="handleToggleFavoriteInSelector"
                 />
                  <!-- Add individual card handling for spin? Need to adjust AttackGrid or handle click here -->
                  <!-- Let's try applying class based on revealedIds directly in AttackGrid if possible, -->
@@ -59,27 +62,39 @@
 
       <button 
         type="submit" 
-        :disabled="isLoading || !concept.trim() || !hasEnoughCredits || remainingChars < 0" 
+        :disabled="isLoading || !concept.trim() || !hasEnoughCredits || remainingChars < 0 || isLoadingConfig"
         class="button button-primary open-booster-button"
-        :class="{ 'disabled-look': isLoading || !concept.trim() || !hasEnoughCredits || remainingChars < 0 }"
+        :class="{ 'disabled-look': isLoading || !concept.trim() || !hasEnoughCredits || remainingChars < 0 || isLoadingConfig }"
       >
         <span class="button-icon">🎁</span>
-        {{ isLoading ? 'Opening...' : `Open Booster for ${BOOSTER_COST} 💰` }}
+        <span v-if="isLoading">Opening...</span>
+        <span v-else-if="isLoadingConfig">Loading Cost...</span>
+        <span v-else>{{ `Open Booster for ${boosterCost} 💰` }}</span>
       </button>
 
       <!-- Favorite Attacks Selection -->
       <div v-if="userAttacks.length > 0" class="form-group favorite-attacks-section full-width">
         <label>Select Favorite Attacks (Optional, Max {{ MAX_FAVORITES }} for Inspiration):</label>
 
-        <!-- Add Search Input -->
-        <div class="search-bar-container">
-          <input 
-            type="search" 
-            v-model="favoriteSearchQuery" 
-            placeholder="Search your attacks..." 
-            class="search-input"
-          />
+        <!-- UPDATED: Add Search & Filter Controls -->
+        <div class="controls-bar">
+          <div class="search-bar-container">
+            <input 
+              type="search" 
+              v-model="favoriteSearchQuery" 
+              placeholder="Search your attacks..." 
+              class="search-input"
+            />
+          </div>
+          <div class="filter-toggle-container">
+            <label class="toggle-switch">
+              <input type="checkbox" v-model="showOnlyFavoritesInSelector">
+              <span class="slider"></span>
+            </label>
+            <span class="toggle-label">Only Favorites</span>
+          </div>
         </div>
+        <!-- END UPDATED -->
 
         <!-- Desktop Grid -->
         <div class="attack-display-desktop">
@@ -89,6 +104,9 @@
                 v-model:selectedIds="selectedFavoriteAttackIds"
                 :maxSelectable="MAX_FAVORITES"
                 class="favorite-attack-selector"
+                :showFavoriteButton="true" 
+                :favoriteAttackIds="favoriteAttackIdsSet"
+                @toggleFavorite="handleToggleFavoriteInSelector"
             />
         </div>
         <!-- Mobile List -->
@@ -100,6 +118,9 @@
                 :disabledIds="new Set()"
                 :selectedIdsSet="selectedFavoriteAttackIdsSet"
                 class="favorite-attack-selector-mobile"
+                :showFavoriteButton="true" 
+                :favoriteAttackIds="favoriteAttackIdsSet"
+                @toggleFavorite="handleToggleFavoriteInSelector"
             />
         </div>
          <small class="selection-counter">{{ selectedFavoriteAttackIds.length }} / {{ MAX_FAVORITES }} selected</small>
@@ -115,6 +136,7 @@ import { useGameStore } from '@/stores/game';
 import { useAuthStore } from '@/stores/auth';
 import AttackGrid from '@/components/AttackGrid.vue';
 import AttackListMobile from '@/components/AttackListMobile.vue';
+import { fetchGameConfig } from '@/services/api';
 
 const gameStore = useGameStore();
 const authStore = useAuthStore();
@@ -127,9 +149,12 @@ const generatedAttacks = ref([]);
 const revealedAttackIds = ref(new Set());
 const selectedFavoriteAttackIds = ref([]);
 const favoriteSearchQuery = ref('');
+const showOnlyFavoritesInSelector = ref(false);
+
+const boosterCost = ref(1);
+const isLoadingConfig = ref(true);
 
 const MAX_CONCEPT_LENGTH = 50;
-const BOOSTER_COST = 6;
 const MAX_FAVORITES = 6;
 
 // Computed property for character count
@@ -138,27 +163,54 @@ const remainingChars = computed(() => MAX_CONCEPT_LENGTH - conceptCharCount.valu
 
 // Get current user credits
 const userCredits = computed(() => authStore.currentUser?.booster_credits ?? 0);
-const hasEnoughCredits = computed(() => userCredits.value >= BOOSTER_COST);
+const hasEnoughCredits = computed(() => userCredits.value >= boosterCost.value);
 
 // Get user's attacks from the AUTH store
 const userAttacks = computed(() => authStore.currentUser?.attacks || []);
 
-// Filter user attacks based on search query
-const filteredUserAttacks = computed(() => {
-  if (!favoriteSearchQuery.value) return userAttacks.value;
-  const lowerQuery = favoriteSearchQuery.value.toLowerCase();
-  return userAttacks.value.filter(attack => 
-    (attack.name && attack.name.toLowerCase().includes(lowerQuery)) ||
-    (attack.description && attack.description.toLowerCase().includes(lowerQuery)) // Optional: search description too
-  );
+// --- NEW: Favorite Attack IDs Set from Auth Store ---
+const favoriteAttackIdsSet = computed(() => {
+    const ids = new Set();
+    if (authStore.currentUser && authStore.currentUser.attacks) {
+        authStore.currentUser.attacks.forEach(attack => {
+            if (attack && attack.id !== undefined && attack.is_favorite) {
+                ids.add(attack.id);
+            }
+        });
+    }
+    return ids;
 });
 
-// --- NEW: Computed property for Selected IDs Set ---
+// Filter user attacks based on search query AND favorite toggle
+const filteredUserAttacks = computed(() => {
+  let attacks = userAttacks.value || [];
+  // Filter by favorite toggle
+  if (showOnlyFavoritesInSelector.value) {
+    attacks = attacks.filter(attack => attack.is_favorite);
+  }
+  // Filter by search query
+  if (favoriteSearchQuery.value) {
+    const lowerQuery = favoriteSearchQuery.value.toLowerCase();
+    attacks = attacks.filter(attack => 
+      (attack.name && attack.name.toLowerCase().includes(lowerQuery)) ||
+      (attack.description && attack.description.toLowerCase().includes(lowerQuery))
+    );
+  }
+  // Sort: Favorites first, then by name
+  return attacks.sort((a, b) => {
+      const favA = a.is_favorite ? 0 : 1;
+      const favB = b.is_favorite ? 0 : 1;
+      if (favA !== favB) return favA - favB;
+      return a.name.localeCompare(b.name);
+  });
+});
+
+// --- Restore computed property for Selected IDs Set (for mobile list selection state) --- 
 const selectedFavoriteAttackIdsSet = computed(() => {
     return new Set(selectedFavoriteAttackIds.value);
 });
 
-// --- NEW: Mobile Favorite Selection Handler ---
+// --- Mobile Favorite Selection Handler ---
 function toggleFavoriteSelection(attack) {
   const index = selectedFavoriteAttackIds.value.indexOf(attack.id);
   if (index > -1) {
@@ -170,6 +222,38 @@ function toggleFavoriteSelection(attack) {
       selectedFavoriteAttackIds.value.push(attack.id);
     }
   }
+}
+
+// --- NEW: Handle Toggle Favorite Event --- 
+async function handleToggleFavoriteInSelector(attackId) {
+    if (!attackId) return;
+    // No optimistic update here to avoid complexity, just call store action
+    try {
+        await authStore.toggleAttackFavorite(attackId);
+        // User data in store will update automatically, triggering computed properties
+    } catch (err) {
+        console.error("Failed to toggle favorite in creator view:", err);
+        // Error message handled by store/displayed globally
+    }
+}
+
+async function fetchConfig() {
+    isLoadingConfig.value = true;
+    try {
+        const response = await fetchGameConfig();
+        if (response.data && response.data.attack_generation_cost) {
+            boosterCost.value = response.data.attack_generation_cost;
+            console.log("Booster cost fetched:", boosterCost.value);
+        } else {
+             console.warn("Attack generation cost not found in config response, using default.");
+             boosterCost.value = 1; // Fallback to default if not found
+        }
+    } catch (err) {
+        console.error("Failed to fetch game config:", err);
+        boosterCost.value = 1; // Use default on error
+    } finally {
+        isLoadingConfig.value = false;
+    }
 }
 
 async function handleSubmit() {
@@ -213,6 +297,7 @@ onMounted(async () => {
     revealedAttackIds.value.clear();
     selectedFavoriteAttackIds.value = [];
     favoriteSearchQuery.value = '';
+    fetchConfig();
 });
 
 </script>
@@ -327,8 +412,76 @@ onMounted(async () => {
   text-align: left; /* Ensure label is left-aligned */
 }
 
+.controls-bar {
+  display: flex;
+  justify-content: space-between; /* Align items */
+  align-items: center;
+  margin-bottom: 8px; /* Adjust spacing if needed */
+  gap: 15px;
+}
+
 .search-bar-container {
-  margin-bottom: 8px; 
+  flex-grow: 1; /* Allow search to take up space */
+  margin-bottom: 0; /* Remove margin if inside flex */
+}
+
+.filter-toggle-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.toggle-label {
+  font-size: 0.85em;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+/* Basic Toggle Switch Styles */
+.toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 34px;
+  height: 20px;
+}
+
+.toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: var(--color-border);
+  transition: .4s;
+  border-radius: 20px;
+  border: 1px solid var(--color-border-hover);
+}
+
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 14px;
+  width: 14px;
+  left: 2px;
+  bottom: 2px;
+  background-color: var(--color-panel-bg);
+  transition: .4s;
+  border-radius: 50%;
+}
+
+input:checked + .slider {
+  background-color: var(--color-accent-secondary); /* Color when on */
+}
+
+input:checked + .slider:before {
+  transform: translateX(14px);
 }
 
 .favorite-attack-selector {

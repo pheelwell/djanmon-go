@@ -20,4 +20,6 @@ urlpatterns = [
     # NEW: Attack Delete Endpoint
     path('attacks/<int:pk>/delete/', views.AttackDeleteView.as_view(), name='attack-delete'),
     path('leaderboard/attacks/', views.AttackLeaderboardView.as_view(), name='attack_leaderboard'),
+    path('attacks/<int:pk>/favorite/', views.AttackFavoriteToggleView.as_view(), name='attack-favorite-toggle'),
+    path('config/', views.GameConfigurationView.as_view(), name='game_config'),
 ]

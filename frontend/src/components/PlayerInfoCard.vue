@@ -103,7 +103,11 @@ const cardClasses = computed(() => [
 
 <template>
   <div :class="cardClasses">
-      <h3>{{ player?.username }} <span v-if="player.is_bot" class="bot-label">(BOT)</span></h3>
+      <!-- REMOVED: Header with Picture -->
+      <!-- <div class="card-header"> ... </div> -->
+      <!-- RESTORED: Simple Header -->
+      <h3>{{ player?.username }} <span v-if="player?.is_bot" class="bot-label">(BOT)</span></h3>
+
       <!-- Container for Badges -->
       <div class="badges-area">
           <!-- Stat Stages -->
@@ -125,10 +129,10 @@ const cardClasses = computed(() => [
       </div>
       <!-- HP Display at the bottom -->
       <div class="hp-display">
-         <span class="hp-label">HP:</span>
-         <span class="hp-values">{{ currentHp }} / {{ player?.hp }}</span>
          <div class="hp-bar-container">
-             <div :class="['hp-bar-fill', hpBarClass]" :style="{ width: hpPercentage + '%' }"></div>
+             <div :class="['hp-bar-fill', hpBarClass]" :style="{ width: hpPercentage + '%' }">
+                 <span class="hp-value-inside">{{ currentHp }}</span>
+             </div>
          </div>
       </div>
   </div>
@@ -150,22 +154,25 @@ const cardClasses = computed(() => [
     border-radius: 0;
 }
 
-.player-card.opponent {
-    /* Optional: slightly different bg or border for opponent? */
-    /* Example: border-color: var(--color-accent); */
-}
+/* REMOVED: .card-header styles */
+/* REMOVED: .player-pic-container styles */
+/* REMOVED: .player-pic styles */
+/* REMOVED: .player-pic-placeholder styles */
 
+/* RESTORED: Simple Header Style */
 .player-card h3 { /* Player Name */
     margin: 0;
     color: var(--color-accent-secondary);
     font-size: 1.1em;
     font-weight: normal;
     line-height: 1.2;
+    /* RESTORED centering and border */
     text-align: center;
     border-bottom: 1px dashed var(--color-border);
     padding-bottom: 4px;
     margin-bottom: 4px;
     text-transform: uppercase;
+    /* REMOVED flex-grow */
 }
 
 .bot-label {
@@ -223,32 +230,19 @@ const cardClasses = computed(() => [
 .hp-display {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 8px; /* Keep gap? Or remove if only bar remains */
     width: 100%;
-}
-
-.hp-label {
-    font-size: 0.9em;
-    color: var(--color-text);
-    flex-shrink: 0;
-}
-
-.hp-values {
-    font-size: 0.9em;
-    color: var(--color-text);
-    flex-shrink: 0;
-    margin-left: auto; /* Push values to right */
-    font-weight: bold;
+    /* REMOVED: .hp-label and .hp-values styles */
 }
 
 .hp-bar-container {
     flex-grow: 1;
-    height: 15px; /* Pixel-friendly height */
+    height: 18px; /* Slightly taller maybe? */
     background-color: #333; /* Dark background for bar */
     border: 1px solid var(--color-border);
     padding: 1px; /* Inner padding to contain fill */
     box-shadow: inset 1px 1px 0px rgba(0,0,0,0.5); /* Inner shadow */
-    position: relative;
+    position: relative; /* Keep relative for fill positioning */
 }
 
 .hp-bar-fill {
@@ -259,6 +253,27 @@ const cardClasses = computed(() => [
     left: 0;
     /* Base color if none match */
     background-color: var(--color-text); 
+    /* NEW: Center content (the HP value) */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden; /* Hide overflow text */
+}
+
+/* NEW: Style for HP value inside bar */
+.hp-value-inside {
+    font-size: 0.8em;
+    font-weight: normal; /* Use normal weight */
+    color: #000; /* Default dark text */
+    text-shadow: 1px 1px 0px rgba(255, 255, 255, 0.5); /* Light shadow for contrast */
+    line-height: 1;
+    white-space: nowrap; /* Prevent wrapping */
+}
+
+/* Optional: Adjust text color based on bar color for better contrast */
+.hp-bar-low .hp-value-inside {
+    /* color: #fff; */ /* Example: Light text on dark red */
+    /* text-shadow: 1px 1px 0px rgba(0, 0, 0, 0.5); */ /* Dark shadow */
 }
 
 .hp-bar-high {

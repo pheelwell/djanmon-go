@@ -53,6 +53,14 @@ const props = defineProps({
   allowDeletion: { // <-- Add prop
     type: Boolean,
     default: false
+  },
+  showFavoriteButton: { // <-- ADDED
+    type: Boolean,
+    default: false
+  },
+  favoriteAttackIds: { // <-- ADDED (Using Set for efficiency)
+    type: Set,
+    default: () => new Set()
   }
 });
 
@@ -61,7 +69,8 @@ const emit = defineEmits([
   'reveal',
   'update:draggableModel', // For v-model support with drag
   'attackClick', // <-- Add attackClick here
-  'deleteAttack' // <-- Add emit
+  'deleteAttack', // <-- Add emit
+  'toggleFavorite' // <-- ADDED
 ]);
 
 // --- Computed properties for styling/disabling --- 
@@ -80,6 +89,10 @@ const isSelectionActionDisabled = (attackId) => {
 const isRevealed = (attackId) => {
   return props.mode === 'reveal' && props.revealedIds.has(attackId);
 }
+
+const isAttackFavorite = (attackId) => {
+    return props.favoriteAttackIds.has(attackId);
+};
 
 // --- Draggable Setup --- 
 // Emit update event when draggable model changes internally
@@ -148,7 +161,12 @@ function toggleSelection(attackId) {
   <div class="attack-grid-component" :class="[`mode-${mode}`, { 'grid-disabled': disabled }]">
     <!-- Basic Grid for Display/Select/Reveal/Action -->
     <!-- Combine conditions as the structure is the same -->
-    <div v-if="mode === 'display' || mode === 'select' || mode === 'reveal' || mode === 'action'" class="attack-grid-layout">
+    <transition-group 
+        v-if="mode === 'display' || mode === 'select' || mode === 'reveal' || mode === 'action'" 
+        tag="div" 
+        name="grid-fade" 
+        class="attack-grid-layout"
+    >
         <div 
             v-for="attack in attacks" 
             :key="attack.id" 
@@ -164,19 +182,37 @@ function toggleSelection(attackId) {
             }"
             @click="handleItemClick(attack)"  
         >
-             <!-- Reveal Mode: Face-down Card -->
-            <div v-if="mode === 'reveal' && !isRevealed(attack.id)" class="attack-card-face-down">
-                 <span class="reveal-prompt">Click to Reveal</span>
+             <!-- Reveal Mode: Wrapper for Flip -->
+            <div v-if="mode === 'reveal'" class="reveal-card-wrapper" :class="{'is-flipped': isRevealed(attack.id)}">
+                <!-- Face Down -->
+                <div class="reveal-card-face reveal-card-back">
+                    <span class="reveal-prompt">Click to Reveal</span>
+                </div>
+                <!-- Face Up (Attack Card) -->
+                <div class="reveal-card-face reveal-card-front">
+                    <AttackCardDisplay
+                        :attack="attack"
+                        :showDeleteButton="allowDeletion" 
+                        :isFavorite="isAttackFavorite(attack.id)" 
+                        :showFavoriteButton="showFavoriteButton"
+                        @delete-clicked="$emit('deleteAttack', attack)"
+                        @toggle-favorite="$emit('toggleFavorite', attack.id)"
+                    />
+                </div>
             </div>
-            <!-- Default: Attack Card Display -->
+
+            <!-- Default Display (Non-Reveal Modes) -->
             <AttackCardDisplay
                 v-else
                 :attack="attack"
                 :showDeleteButton="allowDeletion && mode !== 'select' && mode !== 'reveal'" 
+                :isFavorite="isAttackFavorite(attack.id)" 
+                :showFavoriteButton="showFavoriteButton"
                 @delete-clicked="$emit('deleteAttack', attack)"
+                @toggle-favorite="$emit('toggleFavorite', attack.id)"
             ></AttackCardDisplay>
         </div>
-    </div>
+    </transition-group>
 
     <!-- Draggable Grid -->
     <draggable 
@@ -185,7 +221,7 @@ function toggleSelection(attackId) {
       class="attack-grid-layout draggable-grid" 
       :group="groupName" 
       item-key="id" 
-      :component-data="{ name: 'fade' }" 
+      :component-data="{ name: 'grid-fade' }" 
       v-bind="computedDragOptions"
       :move="move"
       :disabled="disabled"
@@ -200,7 +236,10 @@ function toggleSelection(attackId) {
                 <AttackCardDisplay 
                   :attack="element" 
                   :showDeleteButton="allowDeletion"
+                  :isFavorite="isAttackFavorite(element.id)"
+                  :showFavoriteButton="showFavoriteButton"
                   @delete-clicked="$emit('deleteAttack', element)"
+                  @toggle-favorite="$emit('toggleFavorite', element.id)"
                 ></AttackCardDisplay>
             </div>
         </template>
@@ -282,11 +321,58 @@ function toggleSelection(attackId) {
 }
 
 /* --- Reveal Mode Styles --- */
-.attack-card-face-down {
+
+/* NEW: Reveal Mode Flip Structure */
+.reveal-card-wrapper {
   width: 100%;
   height: 100%;
   min-height: 150px; /* Match item min-height */
-  background-color: var(--color-bg); /* Dark background */
+  position: relative;
+  perspective: 1000px; /* Add perspective for 3D effect */
+  transform-style: preserve-3d;
+  transition: transform 0.6s;
+}
+
+.reveal-card-face {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  backface-visibility: hidden; /* Hide the back face when rotated */
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+/* Back face (visible initially) */
+.reveal-card-back {
+  background-color: var(--color-bg); 
+  border: 2px dashed var(--color-border);
+  color: var(--color-text);
+  font-size: 0.9em;
+  font-family: var(--font-primary);
+  border-radius: 0;
+  box-sizing: border-box; 
+  text-transform: uppercase;
+  transform: rotateY(0deg); /* Initial state */
+}
+
+/* Front face (hidden initially) */
+.reveal-card-front {
+  transform: rotateY(180deg); /* Rotated away initially */
+}
+
+/* Apply rotation when the card is flipped */
+.reveal-card-wrapper.is-flipped {
+  transform: rotateY(180deg);
+}
+
+/* OLD Face-down Styles (Remove or comment out) */
+/*
+.attack-card-face-down {
+  width: 100%;
+  height: 100%;
+  min-height: 150px;
+  background-color: var(--color-bg); 
   border: 2px dashed var(--color-border);
   display: flex;
   justify-content: center;
@@ -299,14 +385,13 @@ function toggleSelection(attackId) {
   transition: background-color 0.2s;
   text-transform: uppercase;
 }
-
-/* Don't allow hover effect on face-down card if grid is disabled */
 .attack-grid-component:not(.grid-disabled) .attack-card-face-down:hover {
   background-color: var(--color-panel-bg);
   border-color: var(--color-accent-secondary);
   color: var(--color-accent-secondary);
   cursor: pointer;
 }
+*/
 
 .empty-grid-message {
   padding: 20px 10px;
@@ -356,8 +441,35 @@ function toggleSelection(attackId) {
     visibility: hidden;
 }
 
-
 /* Remove redundant interaction styles */
 
+/* --- Transition Group Animations --- */
+.grid-fade-move, /* moving */
+.grid-fade-enter-active,
+.grid-fade-leave-active {
+  transition: all 0.3s ease; /* Adjust timing/easing as needed */
+}
+
+.grid-fade-enter-from,
+.grid-fade-leave-to {
+  opacity: 0;
+  transform: scale(0.95); /* Optional scale */
+}
+
+/* Ensure leaving items are taken out of layout flow smoothly */
+.grid-fade-leave-active {
+  position: absolute; /* Important for layout shifts */
+  /* Attempt to maintain size during leave */
+  /* You might need to adjust this based on the actual grid item size */
+   width: 110px; 
+}
+
+/* If using a background on items, you might need this */
+.grid-fade-leave-active {
+  z-index: 0; 
+}
+.grid-fade-enter-active {
+    z-index: 1;
+}
 
 </style> 

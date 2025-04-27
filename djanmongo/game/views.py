@@ -7,6 +7,7 @@ import bleach # For sanitizing text output from LLM
 import random # For generating random data
 from django.conf import settings # <-- Add settings import
 import google.generativeai as genai # <-- Add genai import
+from rest_framework import serializers # <--- ADD THIS IMPORT
 # --- Add imports for time calculations --- 
 from django.utils import timezone
 from datetime import timedelta 
@@ -17,7 +18,7 @@ from users.models import User
 from .serializers import (
     AttackSerializer, BattleInitiateSerializer, BattleRespondSerializer,
     BattleActionSerializer, BattleSerializer, BattleListSerializer,
-    GenerateAttackRequestSerializer, AttackLeaderboardSerializer # Added AttackLeaderboardSerializer
+    GenerateAttackRequestSerializer, AttackLeaderboardSerializer, AttackFavoriteUpdateSerializer # Added AttackFavoriteUpdateSerializer
 )
 from .battle_logic import apply_attack # Import the new logic function
 # Import new helper functions
@@ -27,6 +28,38 @@ from .attack_generation import (
     process_and_save_generated_attacks
 )
 
+# --- NEW: Game Configuration Serializer ---
+class GameConfigurationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = GameConfiguration
+        fields = (
+            'id',
+            'attack_generation_cost',
+            # Add other config fields here if needed later
+            # 'profile_pic_generation_cost', 
+        )
+# --- END NEW ---
+
+# --- NEW: Game Configuration View ---
+class GameConfigurationView(views.APIView):
+    permission_classes = [permissions.AllowAny] # Config can be public
+    serializer_class = GameConfigurationSerializer
+
+    def get(self, request, *args, **kwargs):
+        # Get the first (and likely only) config object
+        config = GameConfiguration.objects.first()
+        if not config:
+            # Return default values or error if config is mandatory
+            print("Warning: GameConfiguration object not found in DB.")
+            # You might want to create a default config here if it doesn't exist
+            # Or return a default dict:
+            return Response({"attack_generation_cost": 1}, status=status.HTTP_200_OK)
+            # Or return 404:
+            # return Response({"error": "Game configuration not found."}, status=status.HTTP_404_NOT_FOUND)
+        
+        serializer = self.serializer_class(config)
+        return Response(serializer.data)
+# --- END NEW ---
 
 class AttackListView(generics.ListAPIView):
     queryset = Attack.objects.all()
@@ -575,3 +608,30 @@ class AttackDeleteView(views.APIView):
 
         return Response(status=status.HTTP_204_NO_CONTENT)
 # --- End AttackDeleteView ---
+
+# --- NEW: View to toggle favorite status --- 
+class AttackFavoriteToggleView(generics.UpdateAPIView):
+    """
+    Toggles the 'is_favorite' status of an Attack.
+    Requires the user to be the creator of the attack.
+    Expects PATCH request with {"is_favorite": true/false}.
+    """
+    serializer_class = AttackFavoriteUpdateSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        """Ensure users can only modify attacks they created."""
+        return Attack.objects.filter(creator=self.request.user)
+
+    def update(self, request, *args, **kwargs):
+        instance = self.get_object() # Gets the attack, respecting get_queryset
+        serializer = self.get_serializer(instance, data=request.data, partial=True) # Allow partial update
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+
+        # Return the full updated attack data using the main serializer
+        full_serializer = AttackSerializer(instance, context=self.get_serializer_context())
+        return Response(full_serializer.data)
+
+    # perform_update is handled by UpdateAPIView
+# --- END NEW --- 

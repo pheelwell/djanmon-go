@@ -20,6 +20,7 @@ const selectedInEditor = ref([]); // Local state for selected list
 const allAvailableAttacks = ref([]); // Holds the full unfiltered list
 const currentAvailableDraggable = ref([]); // Holds the list bound to draggable (filtered or full)
 const searchQuery = ref(''); 
+const showOnlyFavorites = ref(false); // <-- ADDED
 
 const isSaving = ref(false);
 const error = ref(null);
@@ -32,6 +33,31 @@ const MAX_SELECTED = 6;
 
 // --- Computed property for Count ---
 const selectedCount = computed(() => selectedInEditor.value.length);
+
+// --- NEW: Computed property for ALL Attack IDs Set (including favorite status) ---
+const allAttackInfo = computed(() => {
+    const info = {};
+    if (user.value && user.value.attacks) {
+        user.value.attacks.forEach(attack => {
+            if (attack && attack.id !== undefined) {
+                info[attack.id] = { is_favorite: !!attack.is_favorite };
+            }
+        });
+    }
+    return info;
+});
+
+const favoriteAttackIdsSet = computed(() => {
+    const ids = new Set();
+    if (user.value && user.value.attacks) {
+        user.value.attacks.forEach(attack => {
+            if (attack && attack.id !== undefined && attack.is_favorite) {
+                ids.add(attack.id);
+            }
+        });
+    }
+    return ids;
+});
 
 // --- NEW: Computed property for Selected IDs Set ---
 const selectedAttackIdsSet = computed(() => {
@@ -47,45 +73,44 @@ const initializeEditorLists = () => {
 
     if (user.value && Array.isArray(user.value.attacks)) { 
          console.log(`User ${user.value.id} found with ${user.value.attacks.length} attacks.`);
-         const allUserAttacks = [...user.value.attacks];
+         const allUserAttacks = user.value.attacks.map(a => ({ ...a })); // Create shallow copies to avoid reactivity issues with sorting original store data directly
          const selectedIds = new Set((user.value.selected_attacks || []).map(attack => attack?.id).filter(id => id !== undefined));
          console.log("Selected IDs from store:", Array.from(selectedIds));
          const currentSelected = [];
          const currentAvailable = [];
-         // Reset main lists
-         allAvailableAttacks.value = [];
-         currentAvailableDraggable.value = [];
+         allAvailableAttacks.value = []; // Clear internal full list
+         currentAvailableDraggable.value = []; // Clear visible draggable list
 
          allUserAttacks.forEach(attack => {
-             if (attack && typeof attack === 'object' && attack.id !== undefined) { // Basic check for valid attack object
-                if (selectedIds.has(attack.id)) {
-                    currentSelected.push(attack);
-                } else {
-                    currentAvailable.push(attack);
-                }
+             if (attack && typeof attack === 'object' && attack.id !== undefined) {
+                 // Ensure is_favorite exists, default to false if missing from API/store initially
+                 attack.is_favorite = !!attack.is_favorite;
+                 if (selectedIds.has(attack.id)) {
+                     currentSelected.push(attack);
+                 } else {
+                     currentAvailable.push(attack);
+                 }
              } else {
-                console.warn("Invalid item found in user.attacks:", attack);
+                 console.warn("Invalid item found in user.attacks during init:", attack);
              }
          });
          
-         // Preserve order for selected based on user.selected_attacks
+         // Preserve order for selected
          selectedInEditor.value = currentSelected.sort((a, b) => {
-             const idxA = (user.value.selected_attacks || []).indexOf(a.id);
-             const idxB = (user.value.selected_attacks || []).indexOf(b.id);
-             const effectiveIdxA = idxA === -1 ? Infinity : idxA;
-             const effectiveIdxB = idxB === -1 ? Infinity : idxB;
-             return effectiveIdxA - effectiveIdxB;
+             const idxA = (user.value.selected_attacks || []).map(att => att.id).indexOf(a.id);
+             const idxB = (user.value.selected_attacks || []).map(att => att.id).indexOf(b.id);
+             return (idxA === -1 ? Infinity : idxA) - (idxB === -1 ? Infinity : idxB);
          });
          
-         // ***MODIFIED SORTING FOR AVAILABLE ATTACKS***
-         // Sort available by acquired_at date (descending - newest first)
-         // Assumes an 'acquired_at' field exists, adjust if needed.
+         // Sort the full available list: Favorites first, then by name
          allAvailableAttacks.value = currentAvailable.sort((a, b) => {
-            const dateA = a.acquired_at ? new Date(a.acquired_at) : 0; // Handle missing date
-            const dateB = b.acquired_at ? new Date(b.acquired_at) : 0; // Handle missing date
-            return dateB - dateA; // Descending order
+             const favA = a.is_favorite ? 0 : 1;
+             const favB = b.is_favorite ? 0 : 1;
+             if (favA !== favB) return favA - favB; // Favorites first
+             return a.name.localeCompare(b.name);
          });
-         // Initialize the draggable list (apply filter if needed)
+
+         // Apply initial filter to the draggable list
          filterAvailableAttacks(); 
          console.log(`Initialized selectedInEditor with ${selectedInEditor.value.length} items.`);
          console.log(`Initialized availableInEditor with ${currentAvailableDraggable.value.length} items.`);
@@ -111,17 +136,30 @@ const checkMove = (evt) => {
     return true; 
 };
 
-// --- NEW: Function to Apply Filter --- 
+// --- UPDATED: Function to Apply Filter --- 
 const filterAvailableAttacks = () => {
-    if (!searchQuery.value) {
-        currentAvailableDraggable.value = [...allAvailableAttacks.value];
-    } else {
+    console.log(`Filtering available attacks. Show Favorites: ${showOnlyFavorites.value}, Query: "${searchQuery.value}"`); // Debug log
+    let filtered = [...allAvailableAttacks.value]; // Start with a fresh copy of the *sorted* full list
+
+    // Filter by favorite toggle
+    if (showOnlyFavorites.value) {
+        console.log('Applying favorites filter...'); // Debug log
+        filtered = filtered.filter(attack => attack.is_favorite);
+    }
+
+    // Filter by search query
+    if (searchQuery.value) {
+        console.log('Applying search filter...'); // Debug log
         const lowerCaseQuery = searchQuery.value.toLowerCase();
-        currentAvailableDraggable.value = allAvailableAttacks.value.filter(attack => 
-            attack.name.toLowerCase().includes(lowerCaseQuery) || 
+        filtered = filtered.filter(attack => 
+            (attack.name && attack.name.toLowerCase().includes(lowerCaseQuery)) || 
             (attack.description && attack.description.toLowerCase().includes(lowerCaseQuery))
         );
     }
+    
+    console.log(`Filtered list size: ${filtered.length}`); // Debug log
+    // Assign the final filtered list to the draggable model
+    currentAvailableDraggable.value = filtered;
 };
 
 // --- Save Logic (Modified for auto-save) --- 
@@ -148,6 +186,54 @@ const debouncedSaveSelection = debounce(async () => {
         isSaving.value = false;
     }
 }, 1000); // Debounce for 1 second (adjust as needed)
+
+// --- UPDATED: Handle Toggle Favorite --- 
+async function handleToggleFavorite(attackId) {
+    if (!attackId) return;
+    const attackInAllIndex = allAvailableAttacks.value.findIndex(a => a.id === attackId);
+    let originalFavoriteStatus = null;
+
+    // Optimistic UI update
+    if (attackInAllIndex !== -1) {
+        originalFavoriteStatus = allAvailableAttacks.value[attackInAllIndex].is_favorite;
+        allAvailableAttacks.value[attackInAllIndex].is_favorite = !originalFavoriteStatus;
+        console.log(`Optimistically toggled favorite for ${attackId} to ${!originalFavoriteStatus}`);
+
+        // Re-sort the main list after optimistic toggle
+        allAvailableAttacks.value.sort((a, b) => {
+            const favA = a.is_favorite ? 0 : 1;
+            const favB = b.is_favorite ? 0 : 1;
+            if (favA !== favB) return favA - favB;
+            return a.name.localeCompare(b.name);
+        });
+
+        // Re-apply filters immediately to update the view
+        filterAvailableAttacks();
+    } else {
+        console.warn(`Attack ID ${attackId} not found in allAvailableAttacks for optimistic update.`);
+    }
+    
+    try {
+        await authStore.toggleAttackFavorite(attackId);
+        // Success message handled by store, data updated reactively
+    } catch (err) { // Revert optimistic update on error
+        console.error("Failed to toggle favorite via store, reverting UI:", err);
+        if (attackInAllIndex !== -1 && originalFavoriteStatus !== null) {
+            allAvailableAttacks.value[attackInAllIndex].is_favorite = originalFavoriteStatus; // Revert
+            
+            // Re-sort again after reverting
+            allAvailableAttacks.value.sort((a, b) => {
+                 const favA = a.is_favorite ? 0 : 1;
+                 const favB = b.is_favorite ? 0 : 1;
+                 if (favA !== favB) return favA - favB;
+                 return a.name.localeCompare(b.name);
+            });
+            // Re-apply filters again after reverting
+            filterAvailableAttacks();
+        }
+        // Error message handled by store
+    }
+}
 
 // --- MODIFIED: Delete Handler (Opens Modal) ---
 function handleDeleteAttack(attackToConfirm) {
@@ -214,15 +300,23 @@ watch(() => user.value?.selected_attacks, (newSelection, oldSelection) => {
     }
 }, { deep: true }); 
 
-// Watch for changes in all known attacks (unchanged)
+// The watcher for user.value.attacks should trigger re-initialization
 watch(() => user.value?.attacks, (newAttacks, oldAttacks) => {
-     if (JSON.stringify(newAttacks || []) !== JSON.stringify(oldAttacks || [])) {
+     const newAttacksSimple = (newAttacks || []).map(a => ({id: a.id, name: a.name, is_favorite: a.is_favorite}));
+     const oldAttacksSimple = (oldAttacks || []).map(a => ({id: a.id, name: a.name, is_favorite: a.is_favorite}));
+     if (JSON.stringify(newAttacksSimple) !== JSON.stringify(oldAttacksSimple)) {
+        console.log("User attacks changed in store, re-initializing editor lists..."); // Debug log
         initializeEditorLists();
      }
 }, { deep: true });
 
-// Watch Search Query (unchanged)
+// Watch Search Query
 watch(searchQuery, () => {
+    filterAvailableAttacks();
+});
+
+// Watch Favorite Toggle
+watch(showOnlyFavorites, () => {
     filterAvailableAttacks();
 });
 
@@ -323,15 +417,25 @@ function handleMobileDeselect(attack) {
         <div class="attack-column available-column">
             <h3>Available Attacks</h3>
             
-            <!-- ADD Search Input -->
-            <div class="search-bar-container">
-              <input 
-                type="search" 
-                v-model="searchQuery" 
-                placeholder="Search available attacks..." 
-                class="search-input"
-              />
+            <!-- UPDATED: Search & Filter Controls -->
+            <div class="controls-bar">
+              <div class="search-bar-container">
+                <input 
+                  type="search" 
+                  v-model="searchQuery" 
+                  placeholder="Search available attacks..." 
+                  class="search-input"
+                />
+              </div>
+              <div class="filter-toggle-container">
+                <label class="toggle-switch">
+                  <input type="checkbox" v-model="showOnlyFavorites">
+                  <span class="slider"></span>
+                </label>
+                <span class="toggle-label">Only Favorites ★</span>
+              </div>
             </div>
+            <!-- END UPDATED -->
 
             <!-- Desktop Grid -->
             <div class="attack-display-desktop">
@@ -345,6 +449,9 @@ function handleMobileDeselect(attack) {
                  :move="checkMove" 
                  :allowDeletion="true" 
                  @deleteAttack="handleDeleteAttack" 
+                 :showFavoriteButton="true" 
+                 :favoriteAttackIds="favoriteAttackIdsSet"
+                 @toggleFavorite="handleToggleFavorite"
              >
                  <template #empty>
                      <div class="empty-list-message">
@@ -362,6 +469,9 @@ function handleMobileDeselect(attack) {
                      :disabledIds="selectedAttackIdsSet"
                      :allowDeletion="true" 
                      @deleteAttack="handleDeleteAttack" 
+                     :showFavoriteButton="true"
+                     :favoriteAttackIds="favoriteAttackIdsSet"
+                     @toggleFavorite="handleToggleFavorite"
                  >
                      <template #empty>
                          <div class="empty-list-message">
@@ -633,5 +743,80 @@ function handleMobileDeselect(attack) {
    border: 1px dashed var(--color-border);
    margin-bottom: 1rem;
 }
+
+/* --- NEW: Styles for controls bar --- */
+.controls-bar {
+  display: flex;
+  justify-content: space-between; /* Align items */
+  align-items: center;
+  margin-bottom: 1rem; /* Space below controls */
+  padding: 0 5px; /* Align with grid padding */
+  gap: 15px;
+}
+
+.search-bar-container {
+  flex-grow: 1; /* Allow search to take up space */
+  margin-bottom: 0; /* Remove margin if inside flex */
+}
+
+.filter-toggle-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.toggle-label {
+  font-size: 0.85em;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+/* Basic Toggle Switch Styles */
+.toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 34px;
+  height: 20px;
+}
+
+.toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: var(--color-border);
+  transition: .4s;
+  border-radius: 20px;
+  border: 1px solid var(--color-border-hover);
+}
+
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 14px;
+  width: 14px;
+  left: 2px;
+  bottom: 2px;
+  background-color: var(--color-panel-bg);
+  transition: .4s;
+  border-radius: 50%;
+}
+
+input:checked + .slider {
+  background-color: var(--color-accent-secondary); /* Color when on */
+}
+
+input:checked + .slider:before {
+  transform: translateX(14px);
+}
+/* --- END NEW Styles --- */
 
 </style> 

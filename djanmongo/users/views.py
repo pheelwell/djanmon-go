@@ -6,8 +6,12 @@ from django.contrib.auth import authenticate, login, logout # <-- Add imports
 from django.middleware.csrf import get_token # <-- Add import
 
 from .models import User
-from .serializers import UserRegisterSerializer, UserProfileSerializer, BasicUserSerializer, UserSerializer, UserStatsSerializer, LeaderboardUserSerializer
-from game.models import Attack # Import Attack model
+from .serializers import UserRegisterSerializer, UserProfileSerializer, BasicUserSerializer, UserSerializer, UserStatsSerializer, LeaderboardUserSerializer, UserStatsUpdateSerializer
+from game.models import Attack, GameConfiguration # Import Attack model and GameConfiguration
+
+# --- NEW: Import services ---
+from .services import construct_profile_pic_prompt_for_llm, call_llm_for_profile_prompt, generate_profile_image_with_pixellab
+# -------------------------
 
 class RegisterView(generics.CreateAPIView):
     """Handles user registration.
@@ -176,17 +180,29 @@ class LeaderboardView(generics.ListAPIView):
     serializer_class = LeaderboardUserSerializer
 
     def get_queryset(self):
-        # Fetch all users, annotate with win counts, and order by wins descending
-        # Note: Annotating directly might be more efficient for large user bases
-        # than relying solely on the serializer method field if sorting is needed.
-        # However, for simplicity and consistency with the serializer, we'll 
-        # fetch all users and let the frontend sort or paginate if needed.
-        # If performance becomes an issue, revisit this with annotation.
-        # queryset = User.objects.annotate(win_count=Count('won_battles')).order_by('-win_count', 'username')
+        # Update: We need server-side sorting for the leaderboard based on stats.
+        # This requires annotation or careful ORM filtering/sorting.
+        # Simple annotation example (requires PostgreSQL for JSONField key lookups efficiently):
+        # from django.db.models.functions import Cast, Coalesce
+        # from django.db.models import IntegerField, Value
+        # queryset = User.objects.annotate(
+        #     human_wins=Coalesce(Cast(KeyTextTransform('wins_vs_human', 'stats'), IntegerField()), Value(0))
+        # ).order_by('-human_wins', 'username')
         
         # Simpler approach: Get all users, rely on serializer methods for stats.
-        # Frontend will handle sorting/display.
-        return User.objects.all().order_by('username') # Default order, can be overridden
+        # Let's SORT on the backend now. This might be slow without indexing/annotation.
+        # We'll sort by human wins descending primarily, then username.
+        # Note: Sorting on JSONField keys directly is database-dependent and can be slow.
+        # Consider creating dedicated fields or using annotations for performance.
+        users = sorted(
+            list(User.objects.all()), 
+            key=lambda u: (
+                u.stats.get('wins_vs_human', 0) if isinstance(u.stats, dict) else 0, 
+                u.username
+            ),
+            reverse=True # Sort descending by wins_vs_human
+        )
+        return users
 
 # --- NEW: CSRF Token View ---
 class CsrfTokenView(APIView):
@@ -198,6 +214,81 @@ class CsrfTokenView(APIView):
         csrf_token = get_token(request)
         return Response({'csrfToken': csrf_token})
 # --- END CSRF Token View ---
+
+# --- NEW: View for Profile Picture Generation ---
+class GenerateProfilePictureView(APIView):
+    permission_classes = [IsAuthenticated]
+    serializer_class = UserSerializer # To return updated user data
+
+    def post(self, request, *args, **kwargs):
+        user = request.user
+
+        # 1. Check Credits
+        try:
+            config = GameConfiguration.objects.first()
+            # TODO: Add profile_pic_generation_cost field to GameConfiguration model if needed
+            generation_cost = getattr(config, 'profile_pic_generation_cost', 1) 
+        except Exception:
+            generation_cost = 1 # Fallback if config fails
+
+        if user.booster_credits < generation_cost:
+            return Response(
+                {"detail": f"Insufficient credits. Need {generation_cost}, have {user.booster_credits}."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # 2. Deduct Credits (Consider transaction if needed)
+        try:
+            user.booster_credits -= generation_cost
+            user.save(update_fields=["booster_credits"])
+            print(f"[View] Deducted {generation_cost} credits from {user.username} for profile pic. New balance: {user.booster_credits}")
+        except Exception as e:
+             print(f"[View Error] Failed to deduct credits for user {user.username}: {e}")
+             return Response({"detail": "Error processing credits."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        # 3. Generate Prompt
+        try:
+            # Fetch selected attacks (limit for context)
+            selected_attacks = list(user.selected_attacks.all()[:6])
+            llm_input_prompt = construct_profile_pic_prompt_for_llm(user.username, selected_attacks)
+            generated_image_prompt = call_llm_for_profile_prompt(llm_input_prompt) # Blocking call - consider async/celery for production
+        except Exception as e:
+             print(f"[View Error] LLM prompt generation failed: {e}")
+             # Optionally restore credits here if needed
+             return Response({"detail": "Failed to generate image prompt."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        if not generated_image_prompt:
+            # Optionally restore credits
+            return Response({"detail": "LLM did not return a valid prompt."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        # 4. Generate Image
+        try:
+            # Service now returns base64 data
+            base64_image_data = generate_profile_image_with_pixellab(generated_image_prompt) 
+        except Exception as e:
+             print(f"[View Error] Pixel Lab image generation failed: {e}")
+             # Optionally restore credits
+             return Response({"detail": "Failed to generate image."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        if not base64_image_data:
+             # Optionally restore credits
+            return Response({"detail": "Image generation service failed to return image data."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        # 5. Save Base64 and Prompt to User
+        try:
+            user.profile_picture_base64 = base64_image_data # Save base64 data
+            user.profile_picture_prompt = generated_image_prompt
+            # Update the correct fields
+            user.save(update_fields=["profile_picture_base64", "profile_picture_prompt"])
+        except Exception as e:
+             print(f"[View Error] Failed to save image data for user {user.username}: {e}")
+             # Credits already deducted, log error but maybe still return success? Or specific error?
+             return Response({"detail": "Generated image but failed to save data."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        # 6. Return Updated User Data
+        serializer = self.serializer_class(user, context={'request': request})
+        return Response(serializer.data, status=status.HTTP_200_OK)
+# --- END NEW VIEW --- 
 
 # --- Session-based Login View ---
 class LoginView(APIView):

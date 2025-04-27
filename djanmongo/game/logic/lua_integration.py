@@ -224,6 +224,21 @@ def apply_std_stat_change(context, stat, mod, target_role=None):
         context['state_changed'] = True
         target_name = get_player_name(context, target) or target
         change_dir = "raised" if mod > 0 else "lowered"
+        # --- ADD LOGGING FOR STAT CHANGE --- 
+        log_details = {
+            "stat": stat,
+            "mod": mod, # Log the requested modifier
+            "new_stage": new_stage,
+            "target": target_name,
+            "target_role": target,
+        }
+        if context.get('source_attack'):
+             log_details["source_attack_id"] = context['source_attack'].id
+             log_details["source_attack_name"] = context['source_attack'].name
+        
+        log_text = f"{target_name}'s {stat.upper()} was {change_dir}!" # Simple log text
+        log(context, log_text, "stat_change", "script", log_details)
+        # --- END LOGGING --- 
     else:
         limit_dir = "highest" if mod > 0 else "lowest"
         target_name = get_player_name(context, target) or target
@@ -270,10 +285,17 @@ def get_battle_status(context):
 
 @register_lua_api_func
 def get_player_name(context, role):
-    """Returns the username of the player ('attacker' or 'target')."""
-    user_obj = context['objects'].get(role)
-    # No internal log needed here, just returns None if role invalid
-    return user_obj.username if user_obj else None
+    """Returns the username of the player based on the role string ('player1' or 'player2')."""
+    # 'role' is expected to be 'player1' or 'player2'
+    # context['objects'] keys are also 'player1' and 'player2' (dynamically from current_player_role/opponent_role)
+    user_obj = context.get('objects', {}).get(role) # Directly use the role string as the key
+    if user_obj:
+        return user_obj.username
+    else:
+        # Log a warning if the provided role isn't a valid key or is None
+        valid_roles = list(context.get('objects', {}).keys())
+        logger.warning(f"Lua API Warning: Invalid role '{role}' passed to get_player_name. Valid roles in context: {valid_roles}")
+        return "[Unknown]" # Return a placeholder string instead of None/nil
 
 @register_lua_api_func
 def get_player_id(context, role):
@@ -468,7 +490,7 @@ def execute_lua_script(script_content, battle, current_player, opponent, current
         script_instance (dict, optional): Data for the specific registered script instance being run.
 
     Returns:
-        tuple: (list of log entries, bool indicating if battle state changed)
+        tuple: (list of log entries, bool indicating if battle state changed, potentially updated list of registered scripts)
     """
     script_log_entries = []
     state_changed_by_script = False
@@ -480,7 +502,7 @@ def execute_lua_script(script_content, battle, current_player, opponent, current
 
     try:
         import lupa 
-        lua = lupa.LuaRuntime(register_eval=False, unpack_returned_tuples=True)
+        # lua = lupa.LuaRuntime(register_eval=False, unpack_returned_tuples=True) # REMOVED Redundant runtime
         
         # Prepare context dictionary
         battle_context = {
@@ -521,7 +543,7 @@ def execute_lua_script(script_content, battle, current_player, opponent, current
             'registered_scripts': list(battle.registered_scripts),
         }
         
-        # Prepare the Lua environment
+        # Prepare the Lua environment (Use only one runtime instance)
         lua = lupa.LuaRuntime(unpack_returned_tuples=True)
         lua_globals = lua.globals()
 
@@ -549,19 +571,64 @@ def execute_lua_script(script_content, battle, current_player, opponent, current
             lua_globals[name] = create_api_wrapper(name, func)
 
         # --- Global Variables ---
-        # Inject context variables into Lua globals
         lua_globals.PLAYER1_ROLE = 'player1'
         lua_globals.PLAYER2_ROLE = 'player2'
+        
+        # Assertions to ensure roles are valid strings before assignment
+        assert isinstance(current_player_role, str) and current_player_role in ['player1', 'player2'], f"Invalid current_player_role: {current_player_role}"
+        assert isinstance(opponent_role, str) and opponent_role in ['player1', 'player2'], f"Invalid opponent_role: {opponent_role}"
+
         lua_globals.ATTACKER_ROLE = current_player_role
         lua_globals.TARGET_ROLE = opponent_role
-        lua_globals.SCRIPT_TARGET_ROLE = script_instance.get('target_role') if script_instance else opponent_role
-        lua_globals.CURRENT_TRIGGER = script_instance.get('trigger_type') if script_instance else 'on_attack'
+
+        # Determine script-specific roles
+        me_role_val = None
+        enemy_role_val = None
+        context_role_val = None
+        trigger_who_val = None
+
+        if script_instance:
+            original_attacker = script_instance.get('original_attacker_role')
+            original_target = script_instance.get('original_target_role')
+            trigger_who_val = script_instance.get('trigger_who')
+            
+            # Assert values retrieved from script_instance
+            assert original_attacker in ['player1', 'player2'], f"Invalid original_attacker from script_instance: {original_attacker}"
+            assert original_target in ['player1', 'player2'], f"Invalid original_target from script_instance: {original_target}"
+            assert trigger_who_val in ['ME', 'ENEMY', 'ANY'], f"Invalid trigger_who from script_instance: {trigger_who_val}"
+
+            me_role_val = original_attacker
+            enemy_role_val = original_target
+
+            if trigger_who_val == 'ME':
+                context_role_val = me_role_val
+            elif trigger_who_val == 'ENEMY':
+                context_role_val = enemy_role_val
+            elif trigger_who_val == 'ANY':
+                 context_role_val = current_player_role # Assign current actor for ANY trigger
+        else: # ON_USE case
+            me_role_val = current_player_role
+            enemy_role_val = opponent_role
+            context_role_val = current_player_role # Context is the attacker
+            trigger_who_val = 'ME' # Implicitly ME for ON_USE
+
+        # Final check before assigning to globals
+        assert me_role_val in ['player1', 'player2'], f"Final me_role_val is invalid: {me_role_val}"
+        assert enemy_role_val in ['player1', 'player2'], f"Final enemy_role_val is invalid: {enemy_role_val}"
+        assert context_role_val in ['player1', 'player2'], f"Final context_role_val is invalid: {context_role_val}"
+        
+        # Assign determined roles to Lua globals
+        lua_globals.ME_ROLE = me_role_val
+        lua_globals.ENEMY_ROLE = enemy_role_val
+        lua_globals.CONTEXT_ROLE = context_role_val
+
+        # Other globals
+        lua_globals.CURRENT_TRIGGER_WHO = trigger_who_val # Expose trigger_who
+        lua_globals.CURRENT_TRIGGER_WHEN = script_instance.get('trigger_when') if script_instance else 'ON_USE'
+        lua_globals.CURRENT_TRIGGER_DURATION = script_instance.get('trigger_duration') if script_instance else 'ONCE'
         lua_globals.CURRENT_TURN = battle.turn_number
         lua_globals.CURRENT_REGISTRATION_ID = script_instance.get('registration_id') if script_instance else None
-        lua_globals.SCRIPT_START_TURN = script_instance.get('start_turn') if script_instance else 0
-        # NEW: Roles from the perspective of the original attack use
-        lua_globals.ORIGINAL_ATTACKER_ROLE = script_instance.get('original_attacker_role') if script_instance else current_player_role
-        lua_globals.ORIGINAL_TARGET_ROLE = script_instance.get('original_target_role') if script_instance else opponent_role
+        lua_globals.SCRIPT_START_TURN = script_instance.get('start_turn') if script_instance else battle.turn_number # Start turn is now for ON_USE
 
         # Simple HP globals might still be useful for quick checks
         lua_globals.P1_HP = battle_context['hp'].get('player1', 0)
@@ -570,6 +637,10 @@ def execute_lua_script(script_content, battle, current_player, opponent, current
         # --- ADD Explicit Check for API --- 
         if not lua_globals.log:
             raise RuntimeError("FATAL: Lua 'log' API function failed to register in globals!")
+
+        # --- Debug Print --- 
+        print(f"    DEBUG Lua Globals: ME_ROLE={lua_globals.ME_ROLE}, ENEMY_ROLE={lua_globals.ENEMY_ROLE}, CONTEXT_ROLE={lua_globals.CONTEXT_ROLE}, CURRENT_PLAYER_ROLE={current_player_role}, SCRIPT_INSTANCE_PROVIDED={script_instance is not None}")
+        # --- End Debug Print ---
 
         print(f"    Executing script content...")
         lua.execute(script_content)
@@ -603,12 +674,11 @@ def execute_lua_script(script_content, battle, current_player, opponent, current
                 battle.custom_statuses_player1 = dict(battle_context['custom_statuses'][opponent_role])
             
             # Apply registered script changes (ensure it's a Python list)
-            # Ensure the list contains only JSON-serializable Python dicts
-            battle.registered_scripts = list(battle_context['registered_scripts']) 
-            
+            current_scripts_after_execution = list(battle_context['registered_scripts'])
             print(f"    Applied changes: HP={{battle_context['hp']}}, Momentum={{battle_context['momentum']}}, Stages={{battle_context['stat_stages']}}, CustomStatuses={{battle_context['custom_statuses']}}") # Added statuses
         else:
             print(f"    Script {script_name} reported no state changes.")
+            current_scripts_after_execution = list(battle.registered_scripts) # No changes, return original list
 
     except (lupa.LuaError, Exception) as e: # RESTORED EXCEPTION BLOCK
         # Indentation should be correct from previous fix
@@ -616,8 +686,11 @@ def execute_lua_script(script_content, battle, current_player, opponent, current
         print(f"    Error Type: {type(e).__name__}")
         print(f"    Error Details: {e}")
         # Add error to this script's log entries
-        script_log_entries.append({"source": "system", "text": f"Script error occurred: {e}", "effect_type": "error"}) 
+        script_log_entries.append({"source": "system", "text": f"Script error occurred: {e}", "effect_type": "error"})
         state_changed_by_script = False # Ensure state is not saved if script errored
+        # Ensure the script list returned is the one from *before* the failed script ran
+        current_scripts_after_execution = list(battle.registered_scripts)
 
     print(f"--- Finished Lua script execution for {script_name} (State Changed: {state_changed_by_script}) ---")
-    return script_log_entries, state_changed_by_script 
+    # Return the script list AFTER execution, whether changed or not
+    return script_log_entries, state_changed_by_script, current_scripts_after_execution 

@@ -16,6 +16,8 @@ export const useAuthStore = defineStore('auth', () => {
   const movesetUpdateError = ref(null);
   const isUpdatingStats = ref(false);
   const statsUpdateError = ref(null);
+  const actionError = ref(null);
+  const actionSuccessMessage = ref(null);
 
   // --- Getters ---
   // Update isAuthenticated to check for user object instead of token
@@ -242,6 +244,50 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  // --- NEW: Toggle Favorite Status --- 
+  async function toggleAttackFavorite(attackId) {
+    if (!attackId) return;
+    actionError.value = null;
+    actionSuccessMessage.value = null;
+    const currentAttack = currentUser.value?.attacks?.find(a => a.id === attackId);
+    if (!currentAttack) {
+      actionError.value = 'Attack not found in user profile.';
+      throw new Error(actionError.value);
+    }
+    const newFavoriteStatus = !currentAttack.is_favorite;
+
+    try {
+      const response = await apiClient.patch(`/game/attacks/${attackId}/favorite/`, { 
+        is_favorite: newFavoriteStatus
+      });
+      // Update the attack in the user's list locally
+      const attackIndex = currentUser.value.attacks.findIndex(a => a.id === attackId);
+      if (attackIndex !== -1) {
+        currentUser.value.attacks[attackIndex] = response.data; 
+      }
+      // Update selected attacks too if it's there
+      const selectedIndex = currentUser.value.selected_attacks.findIndex(a => a.id === attackId);
+      if (selectedIndex !== -1) {
+        currentUser.value.selected_attacks[selectedIndex] = response.data;
+      }
+      actionSuccessMessage.value = `Attack "${response.data.name}" ${newFavoriteStatus ? 'favorited' : 'unfavorited'}.`;
+      setTimeout(() => actionSuccessMessage.value = null, 3000); // Clear after 3s
+      return response.data; // Return updated attack
+    } catch (error) {
+      console.error('Failed to toggle favorite:', error.response?.data || error.message);
+      actionError.value = error.response?.data?.detail || 'Could not update favorite status.';
+      // Optionally revert optimistic update here if needed
+      throw error;
+    }
+  }
+
+  // --- END NEW ---
+
+  function clearMessages() {
+    actionError.value = null;
+    actionSuccessMessage.value = null;
+  }
+
   return {
     // State refs (Tokens removed)
     user,
@@ -264,6 +310,8 @@ export const useAuthStore = defineStore('auth', () => {
     updateSelectedAttacks,
     updateUserStats,
     updateUserProfile,
-    deleteAttack
+    deleteAttack,
+    toggleAttackFavorite,
+    clearMessages
   };
 }); 

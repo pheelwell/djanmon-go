@@ -4,6 +4,7 @@ from django.core.validators import MaxValueValidator
 from django.db.models import Q, Count
 from django.db import models as db_models
 from django.utils import timezone # Added for default value
+import json # For JSONField default
 
 # Import Attack model safely for relationship definition
 from game.models import Attack
@@ -17,10 +18,22 @@ class User(AbstractUser):
     speed = models.IntegerField(default=100)
 
     # NEW: Currency for boosters
-    booster_credits = models.PositiveIntegerField(default=0, help_text="Currency earned from battles to open boosters.")
+    booster_credits = models.PositiveIntegerField(default=100, help_text="Currency earned from battles to open boosters.")
 
     # NEW: Track user activity
     last_seen = models.DateTimeField(default=timezone.now, help_text="Last time the user made an authenticated request.")
+
+    # NEW: Profile Picture fields (Storing Base64)
+    profile_picture_base64 = models.TextField(
+        blank=True, 
+        null=True, 
+        help_text="Base64 encoded string of the generated profile picture."
+    )
+    profile_picture_prompt = models.TextField(
+        blank=True, 
+        null=True, 
+        help_text="The prompt used to generate the current profile picture."
+    )
 
     # --- Fields removed to match DB state: is_bot, difficulty ---
     # NEW: Allow others to fight this user as a bot
@@ -42,6 +55,12 @@ class User(AbstractUser):
         blank=True,
         # You might add a validator here later if needed, 
         # but view-level validation is often sufficient for M2M counts
+    )
+
+    # NEW: Store detailed battle stats
+    stats = models.JSONField(
+        default=dict, 
+        help_text="Stores battle statistics like wins/losses vs human/bot, damage dealt etc."
     )
 
     def __str__(self):
@@ -114,3 +133,40 @@ class User(AbstractUser):
             }
         except User.DoesNotExist:
             return None # Should not happen if data is consistent
+
+    # --- NEW: Method to update stats after a battle --- 
+    def update_stats_on_battle_end(self, is_winner, is_vs_bot, damage_dealt=0):
+        """Updates stats stored in the profile's JSON field after a battle."""
+        # Ensure stats is a dictionary
+        if not isinstance(self.stats, dict):
+            # Attempt to load if it's a string, otherwise reset
+            try:
+                loaded_stats = json.loads(self.stats) if isinstance(self.stats, str) else {}
+                self.stats = loaded_stats if isinstance(loaded_stats, dict) else {}
+            except json.JSONDecodeError:
+                self.stats = {}
+
+        # Ensure keys exist and increment damage
+        self.stats.setdefault('wins_vs_human', 0)
+        self.stats.setdefault('losses_vs_human', 0)
+        self.stats.setdefault('wins_vs_bot', 0)
+        self.stats.setdefault('losses_vs_bot', 0)
+        self.stats.setdefault('total_damage_dealt', 0)
+        # self.stats.setdefault('total_battles', 0) # Optional: track total battles
+
+        self.stats['total_damage_dealt'] += damage_dealt
+        # self.stats['total_battles'] += 1 # Optional
+
+        if is_winner:
+            if is_vs_bot:
+                self.stats['wins_vs_bot'] += 1
+            else:
+                self.stats['wins_vs_human'] += 1
+        else: # Loser
+            if is_vs_bot:
+                self.stats['losses_vs_bot'] += 1
+            else:
+                self.stats['losses_vs_human'] += 1
+
+        # Save only the updated stats field
+        self.save(update_fields=['stats']) 

@@ -11,6 +11,7 @@ from django.contrib.admin import SimpleListFilter # Added for custom filter
 from djangoeditorwidgets.widgets import MonacoEditorWidget 
 from django.utils.safestring import mark_safe
 import traceback # For detailed error logging
+from django.db import models
 
 # --- Game Configuration Admin ---
 @admin.register(GameConfiguration)
@@ -37,28 +38,23 @@ class ScriptInlineForm(forms.ModelForm): # Form specifically for the inline
             'lua_code': MonacoEditorWidget(language="lua", wordwrap=True), # REMOVED height=200
         }
 
-class ScriptInline(admin.StackedInline): # Keep StackedInline
+class ScriptInline(admin.TabularInline):
     model = Script
     form = ScriptInlineForm
-    extra = 1 
+    extra = 1
     ordering = ('created_at',)
-    ordering_field = 'created_at'
-    
+
     # Define fieldsets for the INLINE form
     fieldsets = (
         # Make the entire inline collapsible by default
-        (None, { 
+        (None, {
             'classes': ('collapse',), # ADD collapse class here
-            'fields': ( 
+            'fields': (
                  # Add name/desc back if needed, or keep excluded
                  # 'name', 'description',
-                 # --- Triggers --- 
-                'trigger_on_attack', 
-                'trigger_before_attacker_turn',
-                'trigger_after_attacker_turn',
-                'trigger_before_target_turn',
-                'trigger_after_target_turn',
-                # --- Code --- 
+                 # --- NEW Triggers ---
+                 ('trigger_who', 'trigger_when', 'trigger_duration'), # Group them
+                # --- Code ---
                 'lua_code',
             )
         }),
@@ -74,15 +70,16 @@ class AttackAdmin(ModelAdmin):
         'name', 
         'emoji', 
         'momentum_cost', 
-        'has_associated_scripts', 
+        'has_associated_scripts',
+        'is_favorite',
     )
     search_fields = ('name', 'description')
-    list_filter = () 
+    list_filter = ('is_favorite',)
     
     # Define fieldsets using current model fields
     fieldsets = (
         (None, {
-            'fields': ('name', 'emoji', 'description', 'momentum_cost')
+            'fields': ('name', 'emoji', 'description', 'momentum_cost', 'is_favorite')
         }),
         # Fieldset for M2M removed
         # ('Associated Scripts', {
@@ -186,6 +183,14 @@ class AttackUsageStatsAdmin(ModelAdmin):
                     is_vs_bot = battle.player2_is_ai_controlled # Determine if it was a bot battle
                     unique_attacks_used_in_battle = set() # Store Attack objects
 
+                    # --- NEW: Determine loser role ---
+                    loser_role = None
+                    if winner_role == 'player1':
+                        loser_role = 'player2'
+                    elif winner_role == 'player2':
+                        loser_role = 'player1'
+                    # --- END NEW ---
+
                     if not isinstance(battle.last_turn_summary, list):
                         print(f"[Admin Action Warning] Battle {battle.id} has invalid log format. Skipping.")
                         continue
@@ -236,12 +241,24 @@ class AttackUsageStatsAdmin(ModelAdmin):
                                         setattr(battle, f'_counted_win_{attack_obj.id}', True)
                                         wins_contributed_total += 1
                                         
+                                # --- NEW: Check if this LOSER used this attack ---
+                                elif loser_role and log_source_role == loser_role:
+                                    if not hasattr(battle, f'_counted_loss_{attack_obj.id}'):
+                                        if is_vs_bot:
+                                            stats.losses_vs_bot += 1
+                                        else:
+                                            stats.losses_vs_human += 1
+                                        setattr(battle, f'_counted_loss_{attack_obj.id}', True)
+                                        # No need to count total losses separately unless desired for logging
+                                # --- END NEW ---
+
                                 stats.save() # Save the stat object ONCE after all updates for this attack in this battle
 
                     # Optional: Clean up temporary attributes if needed, though they are instance-specific
                     # for attack_obj in unique_attacks_used_in_battle:
                     #    if hasattr(battle, f'_counted_win_{attack_obj.id}'):
                     #        delattr(battle, f'_counted_win_{attack_obj.id}')
+                    #    if hasattr(battle, f'_counted_loss_{attack_obj.id}'): delattr(battle, f'_counted_loss_{attack_obj.id}')
 
 
             # 3. Optional Cleanup of orphan stats (stats for deleted attacks)
@@ -340,31 +357,27 @@ class BattleAdmin(ModelAdmin):
     # --- NEW Display Methods for Battle Attacks & Scripts ---
     @admin.display(description='Player 1 Battle Attacks & Scripts')
     def display_player1_battle_attacks_with_scripts(self, obj):
-        html_output = "<div style=\"margin-bottom: 15px;\";>"
+        html_output = "<div style='margin-bottom: 15px;'>"
         if not obj.player1: return "(No Player 1)"
+        # Use prefetch_related in get_queryset if performance is an issue
         for attack in obj.battle_attacks_player1.all().prefetch_related("scripts"):
-            html_output += f"<div style=\"margin-bottom: 10px; padding-left: 10px; border-left: 2px solid #ccc;\";><b>{attack.name} ({attack.momentum_cost} M)</b>"
+            html_output += f"<div style='margin-bottom: 10px; padding-left: 10px; border-left: 2px solid #ccc;'><b>{attack.name} ({attack.momentum_cost} M)</b>"
             # Add description
             if attack.description:
-                html_output += f"<div style=\"font-size: 0.9em; color: #555; margin-left: 5px; margin-top: 2px;\";>{attack.description}</div>"
+                html_output += f"<div style='font-size: 0.9em; color: #555; margin-left: 5px; margin-top: 2px;'>{attack.description}</div>"
             scripts = attack.scripts.all()
             if scripts:
                 for script in scripts:
-                    triggers = []
-                    if script.trigger_on_attack: triggers.append("On Attack")
-                    if script.trigger_before_attacker_turn: triggers.append("Before Atk Turn")
-                    if script.trigger_after_attacker_turn: triggers.append("After Atk Turn")
-                    if script.trigger_before_target_turn: triggers.append("Before Tgt Turn")
-                    if script.trigger_after_target_turn: triggers.append("After Tgt Turn")
-                    trigger_str = ", ".join(triggers) if triggers else "None"
-                    
-                    html_output += f"<div style=\"margin-left: 15px; margin-top: 5px;\";><i>Script: {script.name} (Triggers: {trigger_str})</i>"
+                    # Use get_FOO_display() for choice fields
+                    trigger_str = f"Who: {script.get_trigger_who_display()}, When: {script.get_trigger_when_display()}, Duration: {script.get_trigger_duration_display()}"
+
+                    html_output += f"<div style='margin-left: 15px; margin-top: 5px;'><i>Script: {script.name} (Triggers: {trigger_str})</i>"
                     # Use format_html, add !important to background-color
-                    formatted_code = format_html("<pre style=\"padding: 8px; border: 1px solid #ddd; margin-top: 5px; white-space: pre-wrap; word-wrap: break-word;\";>{}</pre>", script.lua_code)
+                    formatted_code = format_html("<pre style='padding: 8px; border: 1px solid #ddd; margin-top: 5px; white-space: pre-wrap; word-wrap: break-word;'>{}</pre>", script.lua_code)
                     html_output += formatted_code
                     html_output += "</div>"
             else:
-                html_output += " <i style=\"color: #777;\";>(No scripts)</i>"
+                html_output += " <i style='color: #777;'>(No scripts)</i>"
             html_output += "</div>" # Close attack div
         html_output += "</div>" # Close main container div
         # Mark the fully constructed string as safe
@@ -372,36 +385,73 @@ class BattleAdmin(ModelAdmin):
 
     @admin.display(description='Player 2 Battle Attacks & Scripts')
     def display_player2_battle_attacks_with_scripts(self, obj):
-        html_output = "<div style=\"margin-bottom: 15px;\";>"
+        html_output = "<div style='margin-bottom: 15px;'>"
         if not obj.player2: return "(No Player 2)"
+         # Use prefetch_related in get_queryset if performance is an issue
         for attack in obj.battle_attacks_player2.all().prefetch_related("scripts"):
-            html_output += f"<div style=\"margin-bottom: 10px; padding-left: 10px; border-left: 2px solid #ccc;\";><b>{attack.name} ({attack.momentum_cost} M)</b>"
+            html_output += f"<div style='margin-bottom: 10px; padding-left: 10px; border-left: 2px solid #ccc;'><b>{attack.name} ({attack.momentum_cost} M)</b>"
             # Add description
             if attack.description:
-                html_output += f"<div style=\"font-size: 0.9em; color: #555; margin-left: 5px; margin-top: 2px;\";>{attack.description}</div>"
+                html_output += f"<div style='font-size: 0.9em; color: #555; margin-left: 5px; margin-top: 2px;'>{attack.description}</div>"
             scripts = attack.scripts.all()
             if scripts:
                 for script in scripts:
-                    triggers = []
-                    if script.trigger_on_attack: triggers.append("On Attack")
-                    if script.trigger_before_attacker_turn: triggers.append("Before Atk Turn")
-                    if script.trigger_after_attacker_turn: triggers.append("After Atk Turn")
-                    if script.trigger_before_target_turn: triggers.append("Before Tgt Turn")
-                    if script.trigger_after_target_turn: triggers.append("After Tgt Turn")
-                    trigger_str = ", ".join(triggers) if triggers else "None"
-                    
-                    html_output += f"<div style=\"margin-left: 15px; margin-top: 5px;\";><i>Script: {script.name} (Triggers: {trigger_str})</i>"
+                    # Use get_FOO_display() for choice fields
+                    trigger_str = f"Who: {script.get_trigger_who_display()}, When: {script.get_trigger_when_display()}, Duration: {script.get_trigger_duration_display()}"
+
+                    html_output += f"<div style='margin-left: 15px; margin-top: 5px;'><i>Script: {script.name} (Triggers: {trigger_str})</i>"
                     # Use format_html for the code part ONLY
-                    formatted_code = format_html("<pre style=\"padding: 8px; border: 1px solid #ddd; margin-top: 5px; white-space: pre-wrap; word-wrap: break-word;\";>{}</pre>", script.lua_code)
+                    formatted_code = format_html("<pre style='padding: 8px; border: 1px solid #ddd; margin-top: 5px; white-space: pre-wrap; word-wrap: break-word;'>{}</pre>", script.lua_code)
                     html_output += formatted_code # Append the safe HTML part
                     html_output += "</div>"
             else:
-                html_output += " <i style=\"color: #777;\";>(No scripts)</i>"
+                html_output += " <i style='color: #777;'>(No scripts)</i>"
             html_output += "</div>" # Close attack div
         html_output += "</div>" # Close main container div
         # Mark the fully constructed string as safe
         return mark_safe(html_output)
-    # --- END NEW --- 
+    # --- END NEW ---
+
+# --- NEW: Script Admin Definition ---
+@admin.register(Script)
+class ScriptAdmin(ModelAdmin):
+    list_display = (
+        'name', 
+        'attack_name',
+        'trigger_who', 
+        'trigger_when',
+        'trigger_duration',
+        'tooltip_description'
+    )
+    search_fields = ('name', 'lua_code', 'attack__name', 'tooltip_description')
+    list_filter = ('trigger_who', 'trigger_when', 'trigger_duration')
+    ordering = ('attack__name', 'name')
+    list_select_related = ('attack',) # Optimize query for attack name
+
+    # Use Monaco editor for Lua code
+    formfield_overrides = {
+        models.TextField: {'widget': MonacoEditorWidget(language="lua", wordwrap=True)},
+    }
+
+    fieldsets = (
+        (None, {
+            'fields': ('name', 'attack', 'description') 
+        }),
+        ('Display', {
+            'fields': ('icon_emoji', 'tooltip_description')
+        }),
+        ('Trigger Conditions', {
+            'fields': ('trigger_who', 'trigger_when', 'trigger_duration')
+        }),
+        ('Lua Logic', {
+            'fields': ('lua_code',)
+        }),
+    )
+
+    @admin.display(description='Attack', ordering='attack__name')
+    def attack_name(self, obj):
+        return obj.attack.name if obj.attack else "-"
+# --- END Script Admin Definition ---
 
 # Register Script model if not already managed elsewhere or via inline
 # admin.site.register(Script) # Can be commented out if only managed via Attack inline

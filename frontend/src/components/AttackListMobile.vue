@@ -22,10 +22,18 @@ const props = defineProps({
   allowDeletion: {
     type: Boolean,
     default: false
+  },
+  showFavoriteButton: {
+    type: Boolean,
+    default: false
+  },
+  favoriteAttackIds: {
+    type: Set,
+    default: () => new Set()
   }
 });
 
-const emit = defineEmits(['attackClick', 'deleteAttack']); 
+const emit = defineEmits(['attackClick', 'deleteAttack', 'toggleFavorite']);
 
 function handleClick(attack) {
   if (props.mode !== 'action' || props.disabledIds.has(attack.id)) {
@@ -33,6 +41,10 @@ function handleClick(attack) {
   }
   emit('attackClick', attack);
 }
+
+const isAttackFavorite = (attackId) => {
+    return props.favoriteAttackIds.has(attackId);
+};
 </script>
 
 <template>
@@ -43,7 +55,7 @@ function handleClick(attack) {
     >
       <slot name="empty">No attacks to display.</slot>
     </div>
-    <ul v-else class="attack-list">
+    <transition-group v-else tag="ul" name="list-fade" class="attack-list">
       <li 
         v-for="attack in attacks" 
         :key="attack.id" 
@@ -57,10 +69,13 @@ function handleClick(attack) {
         <AttackCardDisplay 
           :attack="attack" 
           :showDeleteButton="allowDeletion"
+          :isFavorite="isAttackFavorite(attack.id)"
+          :showFavoriteButton="showFavoriteButton"
           @delete-clicked="$emit('deleteAttack', attack)"
+          @toggle-favorite="$emit('toggleFavorite', attack.id)"
         />
       </li>
-    </ul>
+    </transition-group>
   </div>
 </template>
 
@@ -120,5 +135,29 @@ function handleClick(attack) {
 
 /* Remove deep selector if not needed */
 /* .attack-list-item :deep(.attack-card) { ... } */
+
+/* --- Transition Group Animations --- */
+.list-fade-move,
+.list-fade-enter-active,
+.list-fade-leave-active {
+  transition: all 0.3s ease;
+}
+
+.list-fade-enter-from,
+.list-fade-leave-to {
+  opacity: 0;
+  transform: translateY(10px); /* Slide effect for list */
+}
+
+/* Ensure leaving items are taken out of layout flow smoothly */
+.list-fade-leave-active {
+  position: absolute;
+  width: 100%; /* Ensure it takes full width while leaving */
+  z-index: 0;
+}
+
+.list-fade-enter-active {
+    z-index: 1;
+}
 
 </style> 

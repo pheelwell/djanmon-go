@@ -76,7 +76,9 @@ function handleCardMouseLeave() {
           <tr>
             <th>#</th>
             <th>Name</th>
-            <th>Wins</th>
+            <th title="Wins/Losses vs Humans">Human (W/L)</th>
+            <th title="Wins/Losses vs Bots">BOT (W/L)</th>
+            <th title="Total Damage Dealt">Dmg Done</th>
             <th>Atks</th>
           </tr>
         </thead>
@@ -87,7 +89,9 @@ function handleCardMouseLeave() {
               {{ user.username }}
               <span v-if="user.is_bot" class="bot-label">(BOT)</span>
             </td>
-            <td>{{ user.total_wins }}</td>
+            <td class="center">{{ user.wins_vs_human ?? 0 }}/{{ user.losses_vs_human ?? 0 }}</td>
+            <td class="center">{{ user.wins_vs_bot ?? 0 }}/{{ user.losses_vs_bot ?? 0 }}</td>
+            <td class="center">{{ user.total_damage_dealt ?? 0 }}</td>
             <td class="loadout-cell">
               <span v-if="!user.selected_attacks || user.selected_attacks.length === 0">-</span>
               <span
@@ -260,21 +264,32 @@ h2 {
   width: 40px;
 }
 
-.user-leaderboard th:nth-child(3), /* Wins */
+.user-leaderboard th:nth-child(3),
 .user-leaderboard td:nth-child(3),
 .attack-leaderboard th:nth-child(3),
 .attack-leaderboard td:nth-child(3),
 .attack-leaderboard th:nth-child(4),
 .attack-leaderboard td:nth-child(4) { /* Used, Wins */
   text-align: center;
-  width: 60px;
+  /* width: 60px; */ /* Let content decide more */
 }
 
+/* Adjust widths for new User Leaderboard columns */
+.user-leaderboard th:nth-child(3), /* Human W/L */
+.user-leaderboard td:nth-child(3),
+.user-leaderboard th:nth-child(4), /* BOT W/L */
+.user-leaderboard td:nth-child(4) {
+  width: 85px;
+}
+.user-leaderboard th:nth-child(5), /* Dmg Done */
+.user-leaderboard td:nth-child(5) {
+  width: 75px;
+}
 
 .loadout-cell {
     position: relative; 
     vertical-align: middle; 
-    text-align: left; /* Override center */
+    text-align: left; /* Override center, keep for loadout */
 }
 
 .user-leaderboard td:last-child, 

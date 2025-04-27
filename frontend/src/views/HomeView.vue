@@ -148,18 +148,18 @@ onMounted(() => {
 
   updateActiveDisplayFromRoute(); // Set initial display based on current route
 
-  pollingIntervalId = setInterval(() => {
-      // console.log('Polling for updates...'); 
-      gameStore.fetchUsers(true);
-      gameStore.fetchPendingBattles(true);
-      gameStore.fetchActiveBattle(true);
-  }, POLLING_INTERVAL_MS);
+  // pollingIntervalId = setInterval(() => { // <-- COMMENT OUT START
+  //     // console.log('Polling for updates...'); 
+  //     gameStore.fetchUsers(true);
+  //     gameStore.fetchPendingBattles(true);
+  //     gameStore.fetchActiveBattle(true);
+  // }, POLLING_INTERVAL_MS); // <-- COMMENT OUT END
 });
 
 onUnmounted(() => {
-  if (pollingIntervalId) {
-    clearInterval(pollingIntervalId);
-  }
+  // if (pollingIntervalId) { // <-- COMMENT OUT START
+  //   clearInterval(pollingIntervalId);
+  // } // <-- COMMENT OUT END
 });
 
 // --- Action Handlers (Modified for Navigation) ---
@@ -288,21 +288,21 @@ async function handleResponse(battleId, responseAction) {
       <!-- Combined Profile/Moveset Section -->
       <template v-if="activeSection === 'profile'">
         <div v-if="user" class="profile-moveset-container">
-             <UserProfilePanel :key="'profile-panel'" :user="user" />
-             <div :key="'moveset-panel'" class="moveset-manager-panel panel">
+             <UserProfilePanel :user="user" />
+             <div class="moveset-manager-panel panel">
                 <MovesetManager />
              </div>
         </div>
-        <div :key="'profile-loading'" v-else class="panel">
+        <div v-else class="panel">
           <p>Loading user profile...</p>
         </div>
       </template>
 
       <!-- Attack Creator View -->
-      <AttackCreatorView :key="'attack-creator-view'" v-if="activeSection === 'attack-creator'" class="panel" />
+      <AttackCreatorView v-if="activeSection === 'attack-creator'" class="panel" />
 
       <!-- Battle Panel (Formerly Command Center) -->
-      <div :key="'battle-panel'" v-if="activeSection === 'battle' && user" class="actions-panel panel">
+      <div v-if="activeSection === 'battle' && user" class="actions-panel panel">
          <!-- Action Feedback -->
          <div class="action-feedback">
             <p v-if="actionError" class="error-message">⚠️ {{ actionError }}</p>
@@ -339,7 +339,7 @@ async function handleResponse(battleId, responseAction) {
       </div>
 
       <!-- Tutorial Section -->
-      <div :key="'tutorial-panel'" v-if="activeSection === 'tutorial'" class="tutorial-panel panel">
+      <div v-if="activeSection === 'tutorial'" class="tutorial-panel panel">
         <h2>Game Tutorial</h2>
         <!-- Getting Started Section -->
         <section class="tutorial-section getting-started">
@@ -507,7 +507,7 @@ async function handleResponse(battleId, responseAction) {
       </div>
 
       <!-- Leaderboard View -->
-      <LeaderboardView :key="'leaderboard-view'" v-if="activeSection === 'leaderboard'" class="panel" />
+      <LeaderboardView v-if="activeSection === 'leaderboard'" class="panel" />
 
     </div>
   </main>

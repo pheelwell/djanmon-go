@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Attack, Battle, AttackUsageStats
+from .models import Attack, Battle, AttackUsageStats, Script
 from users.serializers import UserSerializer, BasicUserSerializer
 from .logic import calculate_momentum_cost_range
 import collections # For sorting co-used attacks
@@ -9,6 +9,7 @@ class AttackSerializer(serializers.ModelSerializer):
         model = Attack
         fields = (
             'id', 'name', 'description', 'emoji', 'momentum_cost',
+            'is_favorite',
         )
 
 # --- Battle Serializers ---
@@ -29,6 +30,7 @@ class BattleSerializer(serializers.ModelSerializer):
     winner = BasicUserSerializer(read_only=True)
     
     my_selected_attacks = serializers.SerializerMethodField()
+    detailed_registered_scripts = serializers.SerializerMethodField()
 
     class Meta:
         model = Battle
@@ -38,6 +40,7 @@ class BattleSerializer(serializers.ModelSerializer):
             'stat_stages_player1', 'stat_stages_player2',
             'custom_statuses_player1', 'custom_statuses_player2',
             'last_turn_summary',
+            'detailed_registered_scripts',
             'current_momentum_player1', 'current_momentum_player2', 'whose_turn',
             'my_selected_attacks',
             'player2_is_ai_controlled',
@@ -99,6 +102,43 @@ class BattleSerializer(serializers.ModelSerializer):
             
         return serialized_attacks
 
+    def get_detailed_registered_scripts(self, battle_instance):
+        """ Augments registered script instances with base script details. """
+        registered_instances = battle_instance.registered_scripts
+        if not isinstance(registered_instances, list) or not registered_instances:
+            return []
+
+        # Get unique script IDs from the registered instances
+        script_ids = {instance.get('script_id') for instance in registered_instances if instance.get('script_id')}
+        if not script_ids:
+            return registered_instances # Return original if no IDs found
+
+        # Fetch base Script details in one query
+        base_scripts = Script.objects.filter(id__in=script_ids).values(
+            'id', 'icon_emoji', 'tooltip_description'
+        )
+        base_scripts_dict = {script['id']: script for script in base_scripts}
+
+        # Augment the instance data
+        augmented_scripts = []
+        for instance in registered_instances:
+            script_id = instance.get('script_id')
+            base_info = base_scripts_dict.get(script_id)
+            if base_info:
+                # Create a new dict or modify copy to avoid altering original battle state dicts
+                augmented_instance = instance.copy()
+                augmented_instance['icon_emoji'] = base_info.get('icon_emoji', '⚙️') # Add emoji
+                augmented_instance['tooltip_description'] = base_info.get('tooltip_description', 'No description available.') # Add tooltip
+                augmented_scripts.append(augmented_instance)
+            else:
+                # Include instance even if base script not found (maybe log warning?)
+                instance_copy = instance.copy()
+                instance_copy['icon_emoji'] = '❓' # Indicate missing base info
+                instance_copy['tooltip_description'] = 'Base script details not found.'
+                augmented_scripts.append(instance_copy)
+                
+        return augmented_scripts
+
 class BattleListSerializer(serializers.ModelSerializer):
     """Simplified serializer for listing battles/requests."""
     player1 = BasicUserSerializer(read_only=True)
@@ -124,8 +164,15 @@ class NestedAttackDetailSerializer(serializers.ModelSerializer):
     class Meta:
         model = Attack
         # Include fields needed for hover card display
-        fields = ('id', 'name', 'emoji', 'description', 'momentum_cost', 'creator')
+        fields = ('id', 'name', 'emoji', 'description', 'momentum_cost', 'creator', 'is_favorite')
 
+# --- NEW: Serializer for updating favorite status --- 
+class AttackFavoriteUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Attack
+        fields = ('is_favorite',)
+
+# --- END NEW ---
 
 class AttackLeaderboardSerializer(serializers.ModelSerializer):
     # Nest the basic attack details
@@ -133,8 +180,6 @@ class AttackLeaderboardSerializer(serializers.ModelSerializer):
     attack_details = NestedAttackDetailSerializer(source='attack', read_only=True)
     # Get the owner's username from the related Attack's creator field
     owner_username = serializers.CharField(source='attack.creator.username', read_only=True, allow_null=True)
-    # Rename wins_contributed for clarity in API response
-    # total_wins = serializers.IntegerField(source='wins_contributed', read_only=True)
 
     # --- Calculated Fields ---
     win_rate = serializers.SerializerMethodField()
