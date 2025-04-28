@@ -74,7 +74,7 @@
 
       <!-- Favorite Attacks Selection -->
       <div v-if="userAttacks.length > 0" class="form-group favorite-attacks-section full-width">
-        <label>Select Favorite Attacks (Optional, Max {{ MAX_FAVORITES }} for Inspiration):</label>
+        <label>Attacks for inspiration (Max {{ MAX_FAVORITES }}):</label>
 
         <!-- UPDATED: Add Search & Filter Controls -->
         <div class="controls-bar">
@@ -82,7 +82,7 @@
             <input 
               type="search" 
               v-model="favoriteSearchQuery" 
-              placeholder="Search your attacks..." 
+              placeholder="Search..." 
               class="search-input"
             />
           </div>
@@ -96,33 +96,17 @@
         </div>
         <!-- END UPDATED -->
 
-        <!-- Desktop Grid -->
-        <div class="attack-display-desktop">
-            <AttackGrid 
-                :attacks="filteredUserAttacks"
-                mode="select"
-                v-model:selectedIds="selectedFavoriteAttackIds"
-                :maxSelectable="MAX_FAVORITES"
-                class="favorite-attack-selector"
-                :showFavoriteButton="true" 
-                :favoriteAttackIds="favoriteAttackIdsSet"
-                @toggleFavorite="handleToggleFavoriteInSelector"
-            />
-        </div>
-        <!-- Mobile List -->
-        <div class="attack-display-mobile">
-            <AttackListMobile
-                :attacks="filteredUserAttacks"
-                mode="action"
-                @attackClick="toggleFavoriteSelection($event)"
-                :disabledIds="new Set()"
-                :selectedIdsSet="selectedFavoriteAttackIdsSet"
-                class="favorite-attack-selector-mobile"
-                :showFavoriteButton="true" 
-                :favoriteAttackIds="favoriteAttackIdsSet"
-                @toggleFavorite="handleToggleFavoriteInSelector"
-            />
-        </div>
+        <!-- Use single AttackGrid -->
+         <AttackGrid 
+            :attacks="filteredUserAttacks"
+            mode="select" 
+            v-model:selectedIds="selectedFavoriteAttackIds" 
+            :maxSelectable="MAX_FAVORITES"
+            class="favorite-attack-selector" 
+            :showFavoriteButton="true" 
+            :favoriteAttackIds="favoriteAttackIdsSet"
+            @toggleFavorite="handleToggleFavoriteInSelector"
+         />
          <small class="selection-counter">{{ selectedFavoriteAttackIds.length }} / {{ MAX_FAVORITES }} selected</small>
       </div>
       <!-- End Favorite Attacks Selection -->
@@ -135,7 +119,6 @@ import { computed, ref, onMounted } from 'vue';
 import { useGameStore } from '@/stores/game';
 import { useAuthStore } from '@/stores/auth';
 import AttackGrid from '@/components/AttackGrid.vue';
-import AttackListMobile from '@/components/AttackListMobile.vue';
 import { fetchGameConfig } from '@/services/api';
 
 const gameStore = useGameStore();
@@ -145,7 +128,6 @@ const concept = ref('');
 const isLoading = ref(false);
 const error = ref(null);
 const successMessage = ref(null);
-const generatedAttacks = ref([]);
 const revealedAttackIds = ref(new Set());
 const selectedFavoriteAttackIds = ref([]);
 const favoriteSearchQuery = ref('');
@@ -168,6 +150,9 @@ const hasEnoughCredits = computed(() => userCredits.value >= boosterCost.value);
 // Get user's attacks from the AUTH store
 const userAttacks = computed(() => authStore.currentUser?.attacks || []);
 
+// --- NEW: Get generated attacks from the game store --- 
+const generatedAttacks = computed(() => gameStore.lastGeneratedAttacks);
+
 // --- NEW: Favorite Attack IDs Set from Auth Store ---
 const favoriteAttackIdsSet = computed(() => {
     const ids = new Set();
@@ -184,6 +169,8 @@ const favoriteAttackIdsSet = computed(() => {
 // Filter user attacks based on search query AND favorite toggle
 const filteredUserAttacks = computed(() => {
   let attacks = userAttacks.value || [];
+
+  // --- 1. Apply Filters ---
   // Filter by favorite toggle
   if (showOnlyFavoritesInSelector.value) {
     attacks = attacks.filter(attack => attack.is_favorite);
@@ -196,33 +183,26 @@ const filteredUserAttacks = computed(() => {
       (attack.description && attack.description.toLowerCase().includes(lowerQuery))
     );
   }
-  // Sort: Favorites first, then by name
-  return attacks.sort((a, b) => {
+
+  // --- 2. Sort the Filtered List ---
+  attacks.sort((a, b) => {
+      const isASelected = selectedFavoriteAttackIds.value.includes(a.id);
+      const isBSelected = selectedFavoriteAttackIds.value.includes(b.id);
+
+      // Prioritize selected items
+      if (isASelected !== isBSelected) {
+          return isASelected ? -1 : 1;
+      }
+
+      // Maintain original sort (favorite > name)
       const favA = a.is_favorite ? 0 : 1;
       const favB = b.is_favorite ? 0 : 1;
       if (favA !== favB) return favA - favB;
       return a.name.localeCompare(b.name);
   });
-});
 
-// --- Restore computed property for Selected IDs Set (for mobile list selection state) --- 
-const selectedFavoriteAttackIdsSet = computed(() => {
-    return new Set(selectedFavoriteAttackIds.value);
+  return attacks;
 });
-
-// --- Mobile Favorite Selection Handler ---
-function toggleFavoriteSelection(attack) {
-  const index = selectedFavoriteAttackIds.value.indexOf(attack.id);
-  if (index > -1) {
-    // Deselect
-    selectedFavoriteAttackIds.value.splice(index, 1);
-  } else {
-    // Select if not full
-    if (selectedFavoriteAttackIds.value.length < MAX_FAVORITES) {
-      selectedFavoriteAttackIds.value.push(attack.id);
-    }
-  }
-}
 
 // --- NEW: Handle Toggle Favorite Event --- 
 async function handleToggleFavoriteInSelector(attackId) {
@@ -231,9 +211,15 @@ async function handleToggleFavoriteInSelector(attackId) {
     try {
         await authStore.toggleAttackFavorite(attackId);
         // User data in store will update automatically, triggering computed properties
+        await authStore.fetchUserProfile(); 
+        // Optionally clear form on success
+        // concept.value = '';
     } catch (err) {
         console.error("Failed to toggle favorite in creator view:", err);
         // Error message handled by store/displayed globally
+        error.value = err.message || err.response?.data?.error || 'Failed to open booster.';
+    } finally {
+        isLoading.value = false;
     }
 }
 
@@ -259,7 +245,6 @@ async function fetchConfig() {
 async function handleSubmit() {
   error.value = null;
   successMessage.value = null;
-  generatedAttacks.value = [];
   revealedAttackIds.value.clear();
   selectedFavoriteAttackIds.value = [];
   favoriteSearchQuery.value = '';
@@ -277,7 +262,7 @@ async function handleSubmit() {
         selectedFavoriteAttackIds.value // Pass the array of selected favorite IDs
     );
     successMessage.value = result.message || 'Attacks generated successfully!'; // Use message from backend
-    generatedAttacks.value = result.attacks || []; // Store attacks for preview
+    // generatedAttacks.value = result.attacks || []; // REMOVED: Handled by store
     // Refresh user profile to get updated credits
     await authStore.fetchUserProfile(); 
     // Optionally clear form on success
@@ -293,7 +278,6 @@ async function handleSubmit() {
 onMounted(async () => {
     error.value = null;
     successMessage.value = null;
-    generatedAttacks.value = [];
     revealedAttackIds.value.clear();
     selectedFavoriteAttackIds.value = [];
     favoriteSearchQuery.value = '';
@@ -337,7 +321,7 @@ onMounted(async () => {
 
 .form-group {
   width: 100%;
-  max-width: 500px; 
+  max-width: 550px; /* Reduced max-width */
   text-align: left; 
 }
 
@@ -422,7 +406,6 @@ onMounted(async () => {
 
 .search-bar-container {
   flex-grow: 1; /* Allow search to take up space */
-  margin-bottom: 0; /* Remove margin if inside flex */
 }
 
 .filter-toggle-container {
@@ -464,6 +447,23 @@ onMounted(async () => {
   border: 1px solid var(--color-border-hover);
 }
 
+/* Keep Search Input Styles - Remove border-radius */
+.search-input {
+  width: 100%;
+  padding: 0.6rem 1rem;
+  /* border-radius: 6px; REMOVED */
+  border-radius: 0; /* Make square */
+  border: 1px solid var(--color-border-hover); /* Match border */
+  background-color: var(--color-background);
+  color: var(--color-text);
+  font-size: 0.5rem;
+  font-family: var(--font-primary); /* Ensure font consistency */
+}
+.search-input:focus {
+  outline: none;
+  border-color: var(--primary-color, var(--color-accent-secondary)); /* Use theme color or fallback */
+  box-shadow: 0 0 0 2px var(--primary-color-translucent, var(--color-accent-secondary-transparent)); /* Use theme color or fallback */
+}
 .slider:before {
   position: absolute;
   content: "";
@@ -490,6 +490,7 @@ input:checked + .slider:before {
   border-radius: 0;
   padding: 0;
   margin-top: 5px;
+  /* Apply grid column styles directly if needed, or rely on AttackGrid's internal styles */
 }
 
 .selection-counter {
@@ -498,13 +499,6 @@ input:checked + .slider:before {
   font-size: 0.85em;
   color: var(--color-log-system);
   text-align: right;
-}
-
-/* Responsive Toggle */
-.attack-display-mobile { display: none; }
-@media (max-width: 768px) { 
-    .attack-display-desktop { display: none; }
-    .attack-display-mobile { display: block; }
 }
 
 /* Loading and Feedback Messages */
@@ -539,7 +533,7 @@ input:checked + .slider:before {
 
 /* Make concept input wider */
 .concept-group {
-  max-width: 600px; /* Increase max-width */
+  max-width: 500px; /* Reduced max-width */
 }
 
 #attack-concept {

@@ -36,11 +36,9 @@ const allowBotChallengesModel = computed({
   }
 });
 
-// --- NEW: Profile Picture Base64 Data ---
 const profilePicBase64 = computed(() => props.user?.profile_picture_base64);
 // --- END NEW ---
 
-// --- NEW: Function to handle image generation ---
 async function generateProfilePic() {
     if (!props.user || isGeneratingImage.value) return;
 
@@ -218,6 +216,8 @@ async function generateProfilePic() {
     gap: 2rem; /* Space between left and right columns */
     flex-grow: 1; /* Allow content to take available space */
     margin-bottom: 1.5rem; /* Space before footer */
+    /* Default: Row layout */
+    flex-direction: row;
 }
 
 /* --- Left Column (Picture & Credits) --- */
@@ -233,14 +233,10 @@ async function generateProfilePic() {
 .profile-picture-area {
     display: flex;
     flex-direction: column;
-    align-items: center;
-    gap: 0.75rem; 
-    width: 100%; /* Take width of parent column */
+    gap: 1rem; 
 }
 
 .profile-picture-container {
-    width: 100px; /* Larger picture container */
-    height: 100px;
     background-color: var(--color-background-mute);
     border: 2px solid var(--color-border);
     display: flex;
@@ -417,5 +413,35 @@ async function generateProfilePic() {
 
 /* Remove redundant/unused styles */
 .user-basic-info { display: none; } /* Hide the old basic info container */
+
+/* --- Responsive: Mobile Layout --- */
+@media (max-width: 768px) { 
+    .panel-header {
+        flex-direction: column;
+        align-items: center; /* Center header items */
+        gap: 0.5rem;
+    }
+    .stat-level {
+        /* Adjust level display if needed for stacked header */
+    }
+
+    .panel-content {
+        flex-direction: column; /* Stack columns vertically */
+        align-items: center; /* Center columns */
+        gap: 1.5rem; /* Adjust gap for vertical layout */
+    }
+
+    .content-left {
+        flex-basis: auto; /* Remove fixed basis */
+        width: 100%; /* Allow left content to take full width */
+        max-width: 250px; /* Limit max width */
+        /* Items inside are already centered by flexbox */
+    }
+
+    .content-right {
+        width: 100%; /* Allow stats editor to take full width */
+        max-width: 400px; /* Optional: Limit width */
+    }
+}
 
 </style> 

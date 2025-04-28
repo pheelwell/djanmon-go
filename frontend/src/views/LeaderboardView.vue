@@ -3,15 +3,13 @@ import { ref, computed, onMounted } from 'vue';
 import { useGameStore } from '@/stores/game';
 import { useAuthStore } from '@/stores/auth'; // To check if user is logged in
 import { storeToRefs } from 'pinia';
-// import AttackCard from '@/components/AttackCard.vue'; // Import the new component
-// import AttackCardDisplay from '@/components/AttackCardDisplay.vue'; // <-- Import this instead
 import UserStatsSummary from '@/components/UserStatsSummary.vue'; // <-- Import
 import LeaderboardTable from '@/components/LeaderboardTable.vue'; // <-- Import
 
 const gameStore = useGameStore();
 const authStore = useAuthStore();
 
-// Destructure state and getters from the store, making them reactive refs
+// Destructure state and getters from the store
 const {
   myStats,
   leaderboardData,

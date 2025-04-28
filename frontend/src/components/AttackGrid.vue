@@ -1,7 +1,6 @@
 <script setup>
 import { computed } from 'vue';
 import AttackCardDisplay from '@/components/AttackCardDisplay.vue';
-import draggable from 'vuedraggable'; // <-- Import draggable
 
 const props = defineProps({
   attacks: {
@@ -201,11 +200,11 @@ function toggleSelection(attackId) {
                 </div>
             </div>
 
-            <!-- Default Display (Non-Reveal Modes) -->
+            <!-- Default Display (Non-Reveal Modes, including Select) -->
             <AttackCardDisplay
                 v-else
                 :attack="attack"
-                :showDeleteButton="allowDeletion && mode !== 'select' && mode !== 'reveal'" 
+                :showDeleteButton="allowDeletion && mode !== 'reveal'" 
                 :isFavorite="isAttackFavorite(attack.id)" 
                 :showFavoriteButton="showFavoriteButton"
                 @delete-clicked="$emit('deleteAttack', attack)"
@@ -270,11 +269,9 @@ function toggleSelection(attackId) {
   padding: 0; /* No padding on the item itself */
   display: flex; /* Use flex for alignment */
   justify-content: center;
-  align-items: center;
+  align-items: stretch; /* Make children fill the height */
   transition: transform 0.1s ease;
-  min-height: 150px; /* Give items a minimum height */
-  /* Remove fixed height: height: 180px; */
-  /* Remove overflow: hidden; let card handle it */
+  height: 180px; /* << SET FIXED HEIGHT */
 }
 
 /* --- Interaction Styles --- */

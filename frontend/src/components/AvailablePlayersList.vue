@@ -153,7 +153,6 @@ async function handleCancelChallenge(playerId) {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); /* Responsive columns */
     gap: 10px;
-    max-height: 400px; /* Or desired height */
     overflow-y: auto; /* Scroll vertically if needed */
     padding: 5px; /* Padding around the grid */
 }

@@ -211,7 +211,6 @@ onBeforeUnmount(() => {
 .battle-log-container {
     padding: 5px; /* Reduced padding */
     min-height: 150px; /* Adjusted min height */
-    max-height: 400px;
     background-color: var(--color-bg); /* Darker background inside */
     border: 1px solid var(--color-border);
     border-radius: 0; /* No border radius */
@@ -335,10 +334,6 @@ onBeforeUnmount(() => {
      color: var(--color-text);
      border-style: dashed;
      border-color: var(--color-border-hover);
-}
-
-.log-bubble.effect-info {
-    /* Keep base styles */
 }
 
 .log-bubble.effect-error {

@@ -27,13 +27,13 @@ const displayedLogEntries = ref([]);
 const displayedBattleState = ref(null);
 const isProcessingLogs = ref(false);
 let pollingIntervalId = null;
-const POLLING_INTERVAL_MS = 1000;
-const MOMENTUM_THRESHOLD = 50; // Threshold for pendulum swing based on current turn momentum
+const POLLING_INTERVAL_MS = 5000;
+const MOMENTUM_THRESHOLD = 50; // Threshold for pendulum swing
 
-// NEW: State for the previewed attack card
+// State for the previewed attack card
 const selectedAttackPreview = ref(null); 
-const previewedMinCost = ref(null); // <-- State for preview min
-const previewedMaxCost = ref(null); // <-- State for preview max
+const previewedMinCost = ref(null);
+const previewedMaxCost = ref(null);
 
 // Helper delay function
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -197,30 +197,29 @@ function calculateStatModifier(stage) {
 function calculateMomentumCostClientSide(baseCost, userStats, userStages) {
     const speedStage = userStages?.speed ?? 0;
     const speedModifier = calculateStatModifier(speedStage);
-    const effectiveSpeed = Math.max(1, (userStats?.speed ?? 50) * speedModifier); // Assume base 50 if missing
+    const effectiveSpeed = Math.max(1, (userStats?.speed ?? 50) * speedModifier);
 
-    // Simplified cost calculation based on speed ranges (adjust thresholds as needed)
+    // Simplified cost calculation based on speed ranges
     let costMultiplier = 1.0;
     if (effectiveSpeed >= 100) costMultiplier = 0.75; // Faster = cheaper
     else if (effectiveSpeed <= 25) costMultiplier = 1.25; // Slower = costlier
     
-    // Example: Introduce slight randomness or range based on modifier
+    // Example: Introduce slight randomness or range
     const calculatedCost = Math.round(baseCost * costMultiplier);
-    const minCost = Math.round(calculatedCost * 0.9); // Example: 90% of calculated
-    const maxCost = Math.round(calculatedCost * 1.1); // Example: 110% of calculated
+    const minCost = Math.round(calculatedCost * 0.9); 
+    const maxCost = Math.round(calculatedCost * 1.1);
 
-    // Clamp results to sensible bounds (e.g., 0-100)
+    // Clamp results to sensible bounds
     const finalMin = clamp(minCost, 0, 100);
     const finalMax = clamp(maxCost, 0, 100);
 
-    // Ensure min is not greater than max
     return [Math.min(finalMin, finalMax), finalMax]; 
 }
 // --- End Client-side Helpers ---
 
-// MODIFY: Computed for preview visibility
+// Computed for preview visibility
 const isPreviewActive = computed(() => 
-    canAct.value && // Only show preview if user can act
+    canAct.value && 
     previewedMinCost.value !== null && 
     previewedMaxCost.value !== null
 );
@@ -262,7 +261,7 @@ async function fetchBattleData() {
     }
 }
 
-// NEW: Function to calculate and show preview cost
+// Function to calculate and show preview cost
 function previewAttackCost(attack) {
     console.log('[Preview] Attack:', JSON.parse(JSON.stringify(attack || {})));
     if (!attack || !currentUser.value) {
@@ -297,16 +296,16 @@ function previewAttackCost(attack) {
     }
 }
 
-// NEW: Function to clear preview cost
+// Function to clear preview cost
 function clearAttackCostPreview() {
-    console.log('[Preview] Clearing preview costs.'); // Log clearing
+    console.log('[Preview] Clearing preview costs.');
     previewedMinCost.value = null;
     previewedMaxCost.value = null;
 }
 
 // --- Update Event Handlers ---
 
-// MODIFY: handleGridAttackClick (Desktop Grid Click)
+// Desktop Grid Click Handler
 function handleGridAttackClick(attack) {
     clearAttackCostPreview(); // Clear preview on click before submitting
     if (!submittingAction.value && canAct.value && attack?.id) {
@@ -352,7 +351,7 @@ function startPolling() {
     if (pollingIntervalId) clearInterval(pollingIntervalId); 
     console.log('Starting battle polling...');
     pollingIntervalId = setInterval(() => {
-        // Check displayedBattleState for status instead of gameStore directly?
+        // Check displayed state status
         if (displayedBattleState.value && displayedBattleState.value.status === 'active') {
              gameStore.fetchBattleById(battleId.value).catch(err => {
                  console.error("Polling error:", err);
@@ -374,7 +373,7 @@ function stopPolling() {
      }
 }
 
-// MODIFY: handleEmojiClick (Mobile Button Click)
+// Mobile Emoji Button Click Handler
 function handleEmojiClick(attack) {
     if (!submittingAction.value && attack) {
         selectedAttackPreview.value = attack;
@@ -382,7 +381,7 @@ function handleEmojiClick(attack) {
     }
 }
 
-// MODIFY: handlePreviewCardClick (Mobile Preview Click)
+// Mobile Preview Card Click Handler
 function handlePreviewCardClick() {
     if (selectedAttackPreview.value && canAct.value && !submittingAction.value) {
         // Submit action first, which already clears preview
@@ -390,7 +389,7 @@ function handlePreviewCardClick() {
     } else {
         // If not clickable, just clear the preview
         selectedAttackPreview.value = null;
-        clearAttackCostPreview(); // <-- Clear preview here
+        clearAttackCostPreview();
     }
 }
 
@@ -566,6 +565,7 @@ watch(() => battle.value, (newBattleState) => {
                 :player2Name="displayedBattleState.player2.username"
                 :battleId="displayedBattleState.id"
             />
+         </div>
       </div>
 
           <!-- Action Select Panel -->
@@ -573,7 +573,6 @@ watch(() => battle.value, (newBattleState) => {
                <div class="panel-title">
                    {{ displayedBattleState.status === 'finished' ? 'BATTLE OVER' : 'CHOOSE ACTION' }}
                </div>
-
                <!-- Normal Action Area (Hidden when finished) -->
                 <div v-if="displayedBattleState.status !== 'finished'">
                     <!-- DESKTOP: Existing Attack Grid -->
@@ -611,7 +610,6 @@ watch(() => battle.value, (newBattleState) => {
                                     class="preview-card"
                                     :class="{ 'clickable': canAct && !submittingAction }"
                                 />
-                                <div v-else class="preview-placeholder">Select an attack below</div>
                 </div>
 
                             <!-- Mobile: Emoji Buttons -->
@@ -636,14 +634,12 @@ watch(() => battle.value, (newBattleState) => {
                         </div>
             </div>
        </div>
-
-                <!-- Finished State Content (Shown only when finished) -->
+           <!-- Finished State Content -->
                 <div v-if="displayedBattleState.status === 'finished'" class="battle-finished-content">
           <p v-if="displayedBattleState.winner?.id === currentUser?.id" class="win-message">🎉 You won! 🎉</p>
           <p v-else-if="displayedBattleState.winner" class="lose-message">😢 {{ displayedBattleState.winner.username }} won! 😢</p>
           <p v-else class="draw-message">The battle ended unexpectedly.</p>
                     <router-link :to="{ name: 'home' }" class="btn return-home-button">Return Home</router-link>
-                </div>
           </div>
       </div>
 
@@ -662,7 +658,7 @@ watch(() => battle.value, (newBattleState) => {
 
 /* Apply base variables */
 .battle-screen {
-    max-width: 1000px;
+    max-width: 1200px;
     margin: 10px auto; /* Reduced margin */
     padding: 10px;
     display: flex;
@@ -738,8 +734,7 @@ watch(() => battle.value, (newBattleState) => {
     display: flex; 
     justify-content: space-between;
     align-items: center; 
-    padding: 5px var(--panel-padding); /* Reduced padding */
-    margin-bottom: 0; /* Remove bottom margin if needed */
+    padding: 6px 12px;
 }
 
 .battle-header h1 {
@@ -959,375 +954,307 @@ watch(() => battle.value, (newBattleState) => {
 .action-area-mobile {
     display: none;
 }
-
-/* --- Remove Old Responsive Styles --- */
-/* @media (min-width: 768px) { ... } */
-/* @media (max-width: 768px) { ... } */
-/* @media (max-width: 480px) { ... } */
+    .battle-log-container {
+        padding: 5px; /* Reduced padding */
+        min-height: none; /* Adjusted min height */
+        height: 400px;
+}
 
 /* Ensure the new responsive rules are applied if needed */
 @media (max-width: 800px) { 
-    /* --- Fullscreen Mobile Layout --- */
+    
+    .battle-log-container {
+        padding: 5px; /* Reduced padding */
+        min-height: 1000px; /* Adjusted min height */
+        max-height: none;
+        height:none;
+    }
+    /* --- NEW Fullscreen Mobile Layout --- */
     .battle-screen {
     display: flex;
         flex-direction: column;
-        height: 100vh; /* Full viewport height */
-        /* Consider using 100dvh for better mobile browser handling */
+        height: 100vh; /* Or 100dvh */
         width: 100%;
         max-width: none;
         margin: 0;
-        padding: 0; /* Padding goes inside children now */
+        padding: 0; 
         box-sizing: border-box;
-        background-color: var(--color-bg); /* Ensure bg covers screen */
-        gap: 0; /* Remove gap, manage spacing internally */
+        background-color: var(--color-bg);
+        gap: 0; 
     }
 
+    /* --- Mobile Header Styling --- */
     .battle-header {
-        order: 0;
-        flex-shrink: 0; /* Don't shrink header */
-        padding: 5px 8px; /* Inner padding */
-        border-bottom: var(--border-width) solid var(--color-border); /* Add separator */
-        /* Reset potentially conflicting styles */
-        margin: 0;
-        text-align: center;
-        gap: 3px;
-    }
-    .battle-header h1 { font-size: 1.1em; }
-    .battle-header .btn-concede { font-size: 0.8em; padding: 4px 8px; }
-
-    .main-display {
-        order: 1;
-        flex-shrink: 0;
-        padding: 5px 8px;
-        display: flex;
-        flex-direction: column; /* Stack vertically */
+        order: 0; /* Very first element */
+        position: sticky;
+        top: 0;
+        z-index: 30; /* Above player bar */
+        flex-shrink: 0; 
+        padding: 2px 8px; /* Very compact padding */
+        background-color: var(--color-panel-bg); /* Give it background */
+        border-bottom: var(--border-width) solid var(--color-border);
+        display: flex; /* Ensure flex properties apply */
+        justify-content: space-between;
+        align-items: center;
         gap: 5px;
     }
+    .battle-header h1 {
+        font-size: 1em; /* Smaller title */
+        margin: 0;
+    }
+    .battle-header .battle-status {
+        font-size: 0.8em;
+    }
+    .battle-header .btn-concede {
+        font-size: 0.7em;
+        padding: 2px 5px; /* Smaller button */
+    }
 
-    /* NEW: Mobile Wrapper Layout */
-    .player-display-wrapper {
+    /* --- Hide Desktop Elements --- */
+    /* .battle-header, REMOVED from hide rule */ 
+    /* .momentum-display, REMOVED from hide rule */ 
+    .action-area-desktop,
+    .battle-log > .panel-title, /* Hide original log title */
+    .action-select > .panel-title /* Hide original action title */
+     { 
+        display: none !important; 
+    }
+
+    /* --- Sticky Top Bar (Repurposing .main-display) --- */
+    .main-display {
+        order: 1; /* Position at top */
+        position: sticky;
+        top: 30px; /* ADJUSTED - Approx height of mobile header */
+        z-index: 20; /* Ensure above content */
         display: flex;
-        align-items: center; /* Center items vertically */
-        gap: 8px;
-        width: 100%;
-        flex-basis: auto; /* Reset flex basis */
-        min-width: auto; /* Reset min-width */
-        flex-direction: row; /* Explicitly set row for mobile override */
-    }
-    .player-display-wrapper.user-side { order: 3; } /* User at bottom */
-    .player-display-wrapper.opponent-side { 
-        order: 1; /* Opponent at top */
-        flex-direction: row-reverse; /* Keep avatar on right for opponent */
-    }
-
-    /* NEW: Mobile Avatar Size */
-    .player-avatar-large {
-        width: 50px; /* Smaller on mobile */
-        height: 50px;
-        box-shadow: 1px 1px 0px var(--color-border); /* Smaller shadow */
-    }
-    .player-avatar-placeholder {
-        font-size: 1.8em; /* Smaller placeholder */
-    }
-
-    .player-info {
-        flex: 1; /* Take remaining space */
-    }
-
-    .momentum-display {
-        order: 2; /* Momentum in the middle */
-        padding: 5px;
+        flex-direction: column; /* STACK VERTICALLY */
+        align-items: stretch; /* Stretch items horizontally */
+        flex-shrink: 0;
+        margin: -1;
+        padding: 4px 8px; /* Consistent padding */
+        gap: 4px; /* Gap between stacked items */
+        background-color: var(--color-panel-bg); 
+        border-bottom: var(--border-width) solid var(--color-border);
         margin: 0;
-        flex-basis: auto;
-        min-width: initial;
-        background-color: var(--color-panel-bg); /* Give momentum own panel bg on mobile */
-        border: var(--border-width) solid var(--color-border);
-        box-shadow: inset 0 0 0 2px var(--color-bg), 3px 3px 0px var(--color-border);
+    }
+
+    /* Remove horizontal flex sizing/basis from children */
+    .main-display > * { 
+        flex-basis: auto !important; 
+        min-width: initial !important;
+        flex: initial !important; /* Remove flex grow/shrink */
     }
     
-    /* Remove individual panel styling from player cards on mobile, wrapper handles it implicitly */
-    .player-info.panel {
-        background-color: var(--color-panel-bg);
-        border: var(--border-width) solid var(--color-border);
-        box-shadow: inset 0 0 0 2px var(--color-bg), 3px 3px 0px var(--color-border);
-        padding: 8px;
+    /* Set order for stacking */
+    .main-display .player-display-wrapper.opponent-side {
+         order: 1; /* Opponent first */
+         flex-direction: row-reverse; /* Keep avatar right */
     }
-
-    /* Restore panel styles to momentum display for mobile */
     .main-display .momentum-display {
-        background-color: var(--color-panel-bg) !important;
-        border: var(--border-width) solid var(--color-border) !important;
-        box-shadow: inset 0 0 0 2px var(--color-bg), 3px 3px 0px var(--color-border) !important;
-        padding: 5px !important;
+         order: 2; /* Momentum second */
+         /* Keep compact styling */
+         padding: 2px 4px;
+         border: none; 
+         box-shadow: none;
+         background: transparent;
+         gap: 2px; 
+         /* Add a slight border top/bottom for separation? */
+         border-top: 1px solid var(--color-border-light);
+         border-bottom: 1px solid var(--color-border-light);
+         margin: 2px 0;
     }
-    
-    /* Remove panel styles from player-info directly */
-    .player-info.panel {
-        background-color: var(--color-panel-bg);
-        border: var(--border-width) solid var(--color-border);
-        box-shadow: inset 0 0 0 2px var(--color-bg), 3px 3px 0px var(--color-border);
-        padding: 8px;
-    }
-
-    .battle-log {
-        order: 2; /* After main display */
-        flex-grow: 1; /* Fill remaining space */
-        overflow-y: auto; /* Scroll log content */
-        min-height: 0; /* Important for flex-grow to work */
-        padding: 8px; /* Inner padding */
-        border-top: var(--border-width) solid var(--color-border); 
-        border-bottom: var(--border-width) solid var(--color-border); 
-        /* Reset potential conflicts */
-        flex-basis: auto;
-        margin: 0;
-    }
-    
-    .action-select {
-        order: 3; /* Last visually */
-        flex-shrink: 0; /* Don't shrink action area */
-        width: 100%; 
-        padding: 8px; /* Inner padding */
-        background-color: var(--color-panel-bg); /* Needs own background */
-        box-sizing: border-box; 
-        /* Reset potential conflicts */
-        margin: 0;
-        display: flex; /* Ensure title+content stack */
-        flex-direction: column;
-        min-height: initial; /* Remove min height */
+    .main-display .player-display-wrapper.user-side {
+         order: 3; /* User last */
+         flex-direction: row; /* Ensure user avatar is left */
+        margin-bottom: 8;
     }
 
-    /* --- Show/Hide Desktop vs Mobile Action Area --- */
-    .action-area-desktop { display: none; } 
-    .action-area-mobile {
-        display: flex; /* Overrides default 'none' */
-        flex-direction: column;
+    /* Adjust player wrappers for vertical stacking */
+    .main-display .player-display-wrapper {
+        display: flex;
         align-items: center;
         gap: 8px; /* Restore slightly larger gap */
-        padding: 5px 0 0 0; /* Padding top, remove others */
-        width: 100%;
-        flex-grow: 1; 
+    }
+    
+    /* Keep avatar size moderate */
+    .main-display .player-avatar-large {
+        width: 60px; /* INCREASED size */
+        height: 60px; /* INCREASED size */
+        box-shadow: none; 
+        border: 1px solid var(--color-border);
+    }
+     .main-display .player-avatar-placeholder {
+        font-size: 1.8em; /* INCREASED size */
+    }
+    
+     /* Revert some PlayerInfoCard shrinking, but keep somewhat compact */
+    .main-display .player-info.panel {
+        padding: 4px; 
+        background: transparent; 
+        font-size: 1em; /* Slightly larger than before */
+    }
+    .main-display .player-info.panel .player-name {
+        font-size: 1em; /* Normal size */
+    }
+    .main-display .player-info.panel .hp-bar-container {
+        height: 10px; /* Slightly thicker bar */
+        margin-bottom: 3px;
+    }
+     .main-display .player-info.panel .hp-value {
+         font-size: 1em;
+     }
+    .main-display .player-info.panel .status-indicators {
+        gap: 3px; 
+        margin-top: 3px;
+    }
+    .main-display .player-info.panel .status-icon,
+    .main-display .player-info.panel .stat-stage-indicator {
+        font-size: 1em; 
+        padding: 1px 3px; 
+        border-width: 1px;
     }
 
-    /* --- Mobile Attack Preview Styling (Restore size slightly) --- */
-    .mobile-attack-preview {
+    /* Keep momentum compact */
+    .main-display .momentum-label {
+        font-size: 1em; /* Keep small */
+        margin-bottom: 1px;
+    }
+    .main-display .momentum-meter {
+        height: 12px; /* Keep thin */
+        box-shadow: none;
+        border: 1px solid var(--color-border);
+    }
+     .main-display .momentum-value { display: none; }
+    .main-display .registered-scripts-display {
+        min-height: 18px; 
+        margin-top: 2px;
+        padding: 0 2px;
+    }
+    .main-display .script-icon-wrapper { font-size: 0.9em; }
+     .main-display .script-icon-wrapper::before { display: none; }
+
+
+    /* --- Main Content Area (Repurposing .bottom-panels) --- */
+    .bottom-panels {
+        order: 2; /* Position after top bar */
+        display: flex; /* Changed back to flex to allow log to grow */
+        flex-direction: column;
+        flex-grow: 1; 
+        overflow: hidden; /* Contains scrolling */
+        min-height: 0; 
+        /* Removed padding/border etc. - it's just a container */
+    }
+
+    /* --- Scrollable Log Area --- */
+    .battle-log {
+        order: 1; /* Takes precedence within bottom-panels (only child now) */
+        flex-grow: 1; /* Take available space */
+        overflow-y: auto; 
+        min-height: 0; 
+        padding: 8px; /* Restore some padding */
+        border: none;
+        margin: 0;
+        max-height: none; 
+        font-size: 0.9em; 
+        line-height: 1.4;
+        position: static;
+        transition: none; 
+    }
+     
+    /* --- Sticky Bottom Action Bar --- */
+    .action-select { /* Now a direct child of .battle-screen */
+        order: 3; /* Position last */
+        position: sticky;
+        bottom: 0;
+        z-index: 20; /* Ensure above content */
+        flex-shrink: 0; 
+        width: 100%; 
+        padding: 5px 8px; /* Tighter padding */
+        background-color: var(--color-panel-bg); 
+        border-top: var(--border-width) solid var(--color-border);
+        box-sizing: border-box; 
+        margin: 0;
+        display: flex; 
+        flex-direction: column;
+        min-height: auto;
+        /* Panel reset applies, no need for extra bg/border removal */
+    }
+
+    /* Ensure mobile action area is shown and centered */
+    .action-area-mobile {
+        display: flex; 
+        flex-direction: column;
+        align-items: center;
+        gap: 5px; /* Reduced gap */
+        padding: 5px 0; /* Add some padding */
         width: 100%;
-        max-width: 180px; 
-        min-height: 140px; 
-        padding: 5px; 
-        margin-bottom: 5px; 
+        /* flex-grow: 1; Remove grow if container shouldn't expand */
+    }
+
+    /* Adjust mobile preview/buttons if needed */
+    .mobile-attack-preview {
+        /* min-height: 140px; Maybe reduce? */
+        height: 140px;
+        width: 250px;
+        margin-bottom: 3px;
          /* Reset border etc. */
         border: 1px dashed var(--color-border);
         box-sizing: border-box;
         display: flex; 
         justify-content: center; 
         align-items: center; 
+        background-color: transparent; /* CHANGED from default/implied */
+        color: var(--color-text-muted); /* Ensure placeholder text is visible */
     }
-    .mobile-attack-preview.has-preview { border-color: transparent; padding: 0; }
+    .mobile-attack-preview.has-preview { 
+        border-color: transparent; 
+        padding: 0; 
+        background-color: transparent; /* Ensure it stays transparent */
+    }
     .mobile-attack-preview .preview-placeholder { font-size: 0.9em; }
-    .mobile-attack-preview .preview-card { min-height: 140px; cursor: default; width: 100%; height: auto;}
-    .mobile-attack-preview .preview-card.clickable { cursor: pointer; }
-    .mobile-attack-preview .preview-card.clickable:hover > .attack-card-content { 
-        /* ... hover styles ... */  
-    }
-
-    /* --- Mobile Emoji Button Styling (Restore size slightly) --- */
     .mobile-emoji-buttons {
-        display: flex;
+        display: flex; /* Ensure flex is still applied */
         flex-wrap: wrap; 
-        justify-content: center;
-        gap: 8px; 
-        padding: 5px 0;
+        justify-content: space-around; /* CHANGED from center */
+        gap: 5px;
+        padding: 3px 0;
         width: 100%;
     }
     .emoji-button {
-        font-size: 1.8em; 
-        padding: 5px;
-        min-width: 40px; 
-        min-height: 40px;
-         /* Reset other styles if needed */
-        border: 1px solid var(--color-border);
-        background-color: var(--color-panel-bg);
-        color: var(--color-text);
-        cursor: pointer;
-        display: inline-flex;
-        justify-content: center;
-        align-items: center;
-        line-height: 1;
-        box-shadow: 1px 1px 0px var(--color-border);
-        transition: transform 0.1s ease, box-shadow 0.1s ease, background-color 0.2s ease;
-        border-radius: 0; 
-    }
-    /* ... other emoji button styles ... */
-
-    .action-grid { display: none !important; }
-
-    .action-area-mobile .waiting-message {
-        padding: 15px 0; /* Restore some padding */
-        font-size: 1em;
-         /* ... other styles ... */
-  text-align: center;
-        flex-grow: 1; 
-        display: flex;
-        justify-content: center;
-        align-items: center;
+        font-size: 1.6em; 
+        padding: 4px;
+        min-width: 35px; 
+        min-height: 35px;
     }
     
-    /* General panel styling */
+    /* --- General / Cleanup --- */
     .panel { 
-        padding: 8px; 
-        /* Remove margin/border settings if handled by containers now */
+        /* Reset general panel styles used previously */
+        padding: 0;
         margin: 0;
-        border: none; /* Borders handled by containers */
-        box-shadow: none; /* Shadows handled by containers */
-        background-color: transparent; /* Use container bg */
-    }
-     /* Special panel styling for those needing own background/border */
-    .player-info.panel,
-    .momentum-display.panel {
-        background-color: var(--color-panel-bg);
-        border: var(--border-width) solid var(--color-border);
-        box-shadow: inset 0 0 0 2px var(--color-bg), 3px 3px 0px var(--color-border);
-        padding: 8px;
     }
     
-    .panel-title {
-        font-size: 1em; /* Restore size */
-        margin: -8px -8px 8px -8px; /* Adjust for padding */
-        padding: 5px 10px; /* Restore padding */
-        /* Ensure title styles are suitable */
-        border-bottom: var(--border-width) solid var(--color-border);
-        text-transform: uppercase;
-        background-color: var(--color-border);
-        color: var(--color-text);
-        box-shadow: inset 0 0 0 1px var(--color-panel-bg);
-    }
-    /* Remove title from action-select if it looks odd fixed at bottom */
-    /* .action-select > .panel-title { display: none; } */
-
-    .battle-finished-content p {
-        font-size: 1em;
+    /* Adjust finished content for new layout */
+    .battle-finished-content {
+         /* Contained within action-select now */
+         padding: 10px;
+         gap: 10px;
     }
     .battle-finished-content .return-home-button { 
-        font-size: 1em;
-        padding: 8px 15px;
+        font-size: 0.9em;
+        padding: 6px 12px;
     }
 
-    /* Ensure panel overrides apply on mobile too */
-    .battle-header.panel,
-    .momentum-display.panel {
-        background-color: transparent;
-        border: none;
-        box-shadow: none;
-        padding: 5px 8px; /* Consistent padding */
-        /* Remove border-bottom added specifically for mobile header if needed */
-        border-bottom: none; 
-    }
+}
 
-    .main-display .momentum-display {
-        /* Remove panel styles inherited from the general mobile rule */
-        background-color: transparent !important; /* Use important if needed */
-        border: none !important;
-        box-shadow: none !important;
-        padding: 5px !important; /* Keep specific padding */
-    }
-
-    /* Special panel styling for those needing own background/border */
-    /* Remove momentum display from this rule */
-    .player-info.panel
-    /* Removed: ,.momentum-display.panel */
-     {
-        background-color: var(--color-panel-bg);
-        border: var(--border-width) solid var(--color-border);
-        box-shadow: inset 0 0 0 2px var(--color-bg), 3px 3px 0px var(--color-border);
-        padding: 8px;
+/* NEW: Add fixed width only for desktop */
+@media (min-width: 801px) {
+    .battle-header {
+        width: 1000px;
     }
 }
 
-/* Remove panel styling from header and momentum display */
-.battle-header.panel,
-.momentum-display.panel {
-    background-color: transparent;
-  border: none;
-    box-shadow: none;
-    padding: 5px 8px; /* Adjust padding as needed */
-}
-
-/* Adjust title styling if it was relying on panel background */
-.battle-header .panel-title, /* Titles within these transparent panels */
-.momentum-display .panel-title {
-     /* Example: Remove title background if it looks odd */
-     /* background-color: transparent; */
-     /* border-bottom: none; */ 
-     /* Add a margin-bottom if needed */
-     /* margin-bottom: 10px; */
-     /* Keep existing title text color etc */
-}
-
-/* General panel styling for others */
-.panel {
-    background-color: var(--color-panel-bg);
-    border: var(--border-width) solid var(--color-border);
-    padding: var(--panel-padding);
-    box-shadow: inset 0 0 0 2px var(--color-bg), 3px 3px 0px var(--color-border); 
-    border-radius: 0; 
-}
-
-/* NEW: Registered Scripts Display Styles */
-.registered-scripts-display {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-top: 8px; /* Space below momentum bar */
-    min-height: 24px; /* Ensure it has some height */
-    padding: 0 5px; /* Add some horizontal padding */
-}
-
-.scripts-user-side,
-.scripts-shared-side,
-.scripts-opponent-side {
-    display: flex;
-    gap: 4px; /* Space between icons */
-    align-items: center;
-}
-
-.scripts-user-side { justify-content: flex-start; flex: 1; }
-.scripts-shared-side { justify-content: center; flex: 0; }
-.scripts-opponent-side { justify-content: flex-end; flex: 1; }
-
-.script-icon-wrapper {
-    font-size: 1.2em; /* Adjust size as needed */
-    cursor: default; /* Indicate hover */
-    position: relative; /* Needed for tooltip positioning */
-    display: inline-block; /* Allows margin/padding */
-}
-
-/* Simple CSS Tooltip */
-.script-icon-wrapper::before { 
-    content: attr(data-tooltip);
-    position: absolute;
-    bottom: 100%; /* Position above the icon */
-    left: 50%;
-    transform: translateX(-50%) translateY(-5px); /* Center and add slight gap */
-    background-color: rgba(0, 0, 0, 0.85);
-    color: #fff;
-    padding: 4px 8px;
-    border-radius: 0; /* Match pixel style */
-    font-size: 0.8em;
-    white-space: nowrap;
-    z-index: 10;
-    opacity: 0;
-    visibility: hidden;
-    transition: opacity 0.2s ease, visibility 0s linear 0.2s;
-    pointer-events: none; /* Don't let tooltip block hover */
-    font-family: var(--font-primary); /* Use primary font */
-}
-
-.script-icon-wrapper:hover::before {
-    opacity: 1;
-    visibility: visible;
-    transition-delay: 0.3s; /* Slight delay before showing */
-}
-/* --- End Registered Scripts Styles --- */
-
-/* Ensure panel overrides apply on mobile too */
+/* ... rest of the styles ... */
+/* Hide toggle button by default (desktop) - Already defined outside media query */
+/* ... existing code ... */
 </style> 

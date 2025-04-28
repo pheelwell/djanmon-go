@@ -41,7 +41,7 @@ Character Name: {username}
 - **literal** be literal with the description and add something from every attack if possible
 
 ## Example Descriptions:
-- "A stoic warrior, scarred face, gleaming steel helmet"
+- "A stoic warrior, scarred face, gleaming steel helmet looking"
 - "mischievous rogue grinning from beneath a dark hood, holding a dagger, retro"
 - "wise old mage with a long white beard and a pointed hat, casting a small spell, clown"
 - "cute, fluffy dragon hatchling with big eyes, holding knife, fast, acid"
@@ -66,7 +66,9 @@ def call_llm_for_profile_prompt(llm_input_prompt: str) -> str | None:
             print("[Service Error] GEMINI_API_KEY not found in Django settings.")
             return None
 
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model_name = getattr(settings, 'GEMINI_PROFILE_PROMPT_MODEL', 'gemini-2.0-flash') # Default if setting is missing
+        print(f"[Service] Using Gemini model for profile prompt: {model_name}") # Added print
+        model = genai.GenerativeModel(model_name) # Use configured model name
         safety_settings = {} # Add safety settings if needed
         response = model.generate_content(llm_input_prompt, safety_settings=safety_settings)
         llm_response_text = response.text.strip()

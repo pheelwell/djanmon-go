@@ -1,14 +1,22 @@
 import os
 import dj_database_url
 from pathlib import Path
-from datetime import timedelta # Import timedelta
+from datetime import timedelta  # Import timedelta
 from os.path import join # <-- Add this
-
+from dotenv import load_dotenv
 # Import config helper from djangoeditorwidgets
 from djangoeditorwidgets.config import init_web_editor_config # <-- Add this
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+print(f"BASE_DIR: {BASE_DIR}")
+# print .env file:
+envfile = os.path.join(BASE_DIR, '.env')
+
+#load .env file:
+load_dotenv(envfile)
+
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/4.0/howto/deployment/checklist/
@@ -23,7 +31,7 @@ DEBUG = os.environ.get('DEBUG', 'True') == 'True' # MODIFY this line (or add if 
 ALLOWED_HOSTS_STRING = os.environ.get('DJANGO_ALLOWED_HOSTS', '127.0.0.1,localhost') # ADD or MODIFY this
 ALLOWED_HOSTS = ALLOWED_HOSTS_STRING.split(',') if ALLOWED_HOSTS_STRING else [] # MODIFY this line
 
-# Application definition
+# --- Application definition ---
 
 INSTALLED_APPS = [
     'unfold',  # Required
@@ -48,6 +56,7 @@ INSTALLED_APPS = [
     'users.apps.UsersConfig',
     'game.apps.GameConfig',
 ]
+
 MIDDLEWARE = [
     # SecurityMiddleware should come first or very early
     'django.middleware.security.SecurityMiddleware',
@@ -75,18 +84,19 @@ TEMPLATES = [
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
-                'django.template.context_processors.debug',
-                'django.template.context_processors.request',
-                'django.contrib.auth.context_processors.auth',
-                'django.contrib.messages.context_processors.messages',
+                "django.template.context_processors.debug",
+                "django.template.context_processors.request",
+                "django.contrib.auth.context_processors.auth",
+                "django.contrib.messages.context_processors.messages",
             ],
         },
     },
 ]
 
-WSGI_APPLICATION = 'wsgi.application'
+WSGI_APPLICATION = "wsgi.application"
 
-# Database
+# --- Database Configuration ---
+
 # https://docs.djangoproject.com/en/4.0/ref/settings/#databases
 
 DATABASE_URL = os.environ.get('DATABASE_URL')
@@ -103,20 +113,26 @@ if DATABASE_URL:
             ssl_require=True if os.environ.get('RENDER') else False 
         )
     }
-else:
-    # Local development fallback (WITHOUT Docker Compose or without DATABASE_URL set)
+else: 
+    DB_HOST = os.environ.get("DB_HOST")
+    DB_PORT = os.environ.get("DB_PORT", "5432")  # Default to 5432
+    DB_NAME = os.environ.get("DB_NAME")
+    DB_USER = os.environ.get("DB_USER")
+    DB_PASSWORD = os.environ.get("DB_PASSWORD")
+    print(f"DB_HOST: {DB_HOST}")
+    print(f"DB_PORT: {DB_PORT}")
+    print(f"DB_NAME: {DB_NAME}")
+    print(f"DB_USER: {DB_USER}")
     DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.postgresql',
-            'NAME': 'djanmongo_dev',
-            'USER': 'djanmongo_user',
-            'PASSWORD': 'djanmongo_password',
-            'HOST': 'localhost', # Keep localhost for direct connection
-            'PORT': '5433',      # Keep the original local port
-        }
-    }
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "HOST": DB_HOST,
+            "PORT": DB_PORT,
+            "NAME": DB_NAME,
+            "USER": DB_USER,
+            "PASSWORD": DB_PASSWORD,
+        }}
 
-# --- Custom User Model ---
 AUTH_USER_MODEL = 'users.User'
 
 # Password validation
@@ -141,11 +157,18 @@ REST_FRAMEWORK = {
 # Use environment variable for Gemini API Key, default to None if not set
 GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', None)
 
+# --- Gemini Model Configuration ---
+# Model used for generating game attacks
+GEMINI_ATTACK_GENERATION_MODEL = os.environ.get('GEMINI_ATTACK_GENERATION_MODEL', 'gemini-2.5-flash')
+# Model used for generating profile picture prompts
+GEMINI_PROFILE_PROMPT_MODEL = os.environ.get('GEMINI_PROFILE_PROMPT_MODEL', 'gemini-2.5-flash')
+
 # --- CORS Settings ---
 CORS_ALLOWED_ORIGINS = [
     'http://localhost:5173', # Adjust port if your Vite uses a different one
     'http://127.0.0.1:5173',
-    'https://djanmon-go-1.onrender.com'
+    'https://djanmon-go-1.onrender.com',
+    'https://idx-gengo-65703267-819606423379.europe-west6.run.app'
 ]
 
 # Allow cookies to be sent with cross-origin requests
@@ -155,7 +178,8 @@ CORS_ALLOW_CREDENTIALS = True
 CSRF_TRUSTED_ORIGINS = [
     'http://localhost:5173', # Add your frontend development origin
     'http://127.0.0.1:5173',
-    'https://djanmon-go-1.onrender.com'
+    'https://djanmon-go-1.onrender.com',
+    'https://idx-gengo-65703267-819606423379.europe-west6.run.app'
 ]
 
 # --- Cookie Settings for Cross-Site Production ---

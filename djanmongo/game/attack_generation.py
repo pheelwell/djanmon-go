@@ -244,6 +244,7 @@ Generate exactly 6 unique attacks for a turn-based RPG battle system based on th
 - Healing: Costs momentum similar to damage. Base cost on percentage healed. **NEVER use fixed HP amounts.**
 - Fair Play: Avoid strategies that trivially prevent the opponent from ever getting a turn.
 - Synergy: Encourage synergy, but ensure attacks have standalone value.
+- **Lua String Quoting:** Always use double quotes (`"`) for Lua string literals. **NEVER use single quotes (`'`) inside strings.** For possessives, concatenate correctly (e.g., `get_player_name(ME_ROLE) .. "'s Attack lowered!"`).
 
 ## Creative Lua Script Examples (Updated for New Trigger System):
 
@@ -339,7 +340,8 @@ if CURRENT_TARGET_ROLE == ME_ROLE then
   local counter_dmg = 15
   log('Applying ' .. counter_dmg .. ' counter damage to ' .. get_player_name(CURRENT_ACTOR_ROLE), 'debug', 'debug')
   apply_std_damage(counter_dmg, CURRENT_ACTOR_ROLE) -- Damage the one who just attacked ME
-  -- log(get_player_name(ME_ROLE) .. ' struck back with a counter!', 'info', 'script') -- Auto-logged by API
+  -- Corrected log for possessive:
+  log(get_player_name(ME_ROLE) .. "'s Counter Stance struck back!", "info", "script") 
 else
   log('AFTER_ATTACK triggered, but ' .. get_player_name(ME_ROLE) .. ' was not the target.', 'debug', 'debug')
 end
@@ -554,8 +556,9 @@ def call_gemini_api(prompt: str) -> str | None:
             return None
 
         # --- Use a more capable model if available and needed for complex prompts --- 
-        # model = genai.GenerativeModel('gemini-1.5-flash') # Example: Using 1.5 Flash
-        model = genai.GenerativeModel('gemini-2.0-flash') # Recommended: Use the latest flash model
+        model_name = getattr(settings, 'GEMINI_ATTACK_GENERATION_MODEL', 'gemini-2.0-flash') # Default if setting is missing
+        print(f"[Attack Gen] Using Gemini model: {model_name}") # Added print
+        model = genai.GenerativeModel(model_name) # Use configured model name
         # ----------------------------------------------------------------------- 
 
         # --- Add Safety Settings --- 

@@ -9,7 +9,7 @@ export const useGameStore = defineStore('game', () => {
   const users = ref([]); // List of other users available to challenge
   const pendingBattles = ref([]); // List of battles awaiting response from logged-in user
   const activeBattle = ref(null); // Will hold full battle details if active
-  // NEW: Track outgoing challenges { opponentId: battleId }
+  // Track outgoing challenges { opponentId: battleId }
   const outgoingPendingChallenges = ref(JSON.parse(sessionStorage.getItem('outgoingPendingChallenges') || '{}')); 
   const isLoadingUsers = ref(false);
   const isLoadingPendingBattles = ref(false);
@@ -20,6 +20,9 @@ export const useGameStore = defineStore('game', () => {
   const battleMessage = ref(null); // Specific message for battle updates
   const turnSummary = ref([]); // Store turn summary messages
   const isConceding = ref(false); // Added state for concede loading
+
+  // NEW: Store last generated attacks preview
+  const lastGeneratedAttacks = ref([]);
 
   // NEW: Leaderboard State
   const myStats = ref(null);
@@ -158,7 +161,7 @@ export const useGameStore = defineStore('game', () => {
     }
   }
 
-  // Fetch active battle (Updated to clear battle-specific messages)
+  // Fetch active battle
   async function fetchActiveBattle(isPolling = false) {
       if (!isPolling) {
           isLoadingActiveBattle.value = true;
@@ -169,20 +172,11 @@ export const useGameStore = defineStore('game', () => {
       }
       try {
           const response = await apiClient.get('/game/battles/active/');
-          // --- REMOVE DEBUG LOGGING ---
-          // console.log(`[fetchActiveBattle Polling=${isPolling}] Status: ${response.status}, Data:`, JSON.stringify(response.data));
-          // --- END REMOVE DEBUG ---
           const oldBattleState = JSON.stringify(activeBattle.value);
           const newBattleState = JSON.stringify(response.data);
-          // --- REMOVE DEBUG LOGGING ---
           const changed = oldBattleState !== newBattleState;
-          // console.log(`[fetchActiveBattle Polling=${isPolling}] State changed? ${changed}`);
-          // --- END REMOVE DEBUG ---
-          // Only update if state actually changed to avoid needless reactivity triggers
           if (changed) {
-              // console.log(`[fetchActiveBattle Polling=${isPolling}] Updating activeBattle.value`); // REMOVE DEBUG
               activeBattle.value = response.data;
-              // If a battle became active, clear any related outgoing challenge
               if (activeBattle.value) {
                  const opponentId = activeBattle.value.player1.id === useAuthStore().currentUser?.id ? activeBattle.value.player2.id : activeBattle.value.player1.id;
                  if (outgoingPendingChallenges.value[opponentId] === activeBattle.value.id) {
@@ -192,23 +186,12 @@ export const useGameStore = defineStore('game', () => {
               }
           }
       } catch (error) {
-          // --- REMOVE DEBUG LOGGING ---
-          const status = error.response ? error.response.status : 'N/A';
-          // console.log(`[fetchActiveBattle Polling=${isPolling}] Error Status: ${status}`, error.message);
-          // --- END REMOVE DEBUG ---
           if (error.response && error.response.status === 404) {
-               // --- REMOVE DEBUG LOGGING ---
               if (activeBattle.value !== null) {
-                 // console.log(`[fetchActiveBattle Polling=${isPolling}] Clearing activeBattle.value due to 404`); // REMOVE DEBUG
-                  // Battle not active, check if we had an outgoing challenge for the player
-                  // who was in the now-inactive battle (if activeBattle.value had data)
-                  // THIS LOGIC IS GETTING COMPLEX - maybe rely on explicit cancel for now.
                  activeBattle.value = null;
               }
-               // --- END REMOVE DEBUG ---
           } else {
               console.error('Failed to fetch active battle:', error.response?.data || error.message);
-              // Maybe set a specific error if needed, but avoid overwriting actionError
           }
       } finally {
            if (!isPolling) {
@@ -228,15 +211,11 @@ export const useGameStore = defineStore('game', () => {
       // Always update the battle state from the response
       if (response.data.battle_state) {
           activeBattle.value = response.data.battle_state;
-          // Optional: Check status in response and clear message if finished?
           if (response.data.battle_state.status === 'finished') {
               battleMessage.value = "Battle Finished!";
           }
       } else {
-          // Fallback or error handling if battle_state is missing
           console.warn('Battle state missing from action response', response.data);
-          // Fetch manually as a fallback? 
-          // await fetchBattleById(battleId); 
       }
       return true;
     } catch (error) {
@@ -247,7 +226,7 @@ export const useGameStore = defineStore('game', () => {
     }
   }
 
- // Fetch Battle by ID (Added for potentially refreshing BattleView directly)
+ // Fetch Battle by ID
  async function fetchBattleById(battleId) {
      isLoadingActiveBattle.value = true; // Reuse loading state for simplicity
      battleError.value = null;
@@ -255,8 +234,6 @@ export const useGameStore = defineStore('game', () => {
      turnSummary.value = [];
      try {
          const response = await apiClient.get(`/game/battles/${battleId}/`);
-         // Update activeBattle only if it matches the requested ID 
-         // or if there's no current active battle set
          if (!activeBattle.value || activeBattle.value.id === response.data.id) {
             activeBattle.value = response.data; 
          }
@@ -281,10 +258,8 @@ export const useGameStore = defineStore('game', () => {
       turnSummary.value = []; 
       try {
           const response = await apiClient.post(`/game/battles/${battleId}/concede/`);
-          // Update battle state with the final state from response
           activeBattle.value = response.data.final_state;
           battleMessage.value = response.data.message; // e.g., "You conceded. Opponent wins!"
-          // Turn summary might not be relevant on concede, but clear it
           turnSummary.value = []; 
           return true;
       } catch (error) {
@@ -297,7 +272,7 @@ export const useGameStore = defineStore('game', () => {
       }
   }
 
-  // --- NEW: Leaderboard Actions ---
+  // --- Leaderboard Actions ---
 
   async function fetchMyStats() {
     isLoadingMyStats.value = true;
@@ -319,7 +294,6 @@ export const useGameStore = defineStore('game', () => {
     leaderboardError.value = null;
     try {
       const response = await apiFetchLeaderboard(); // Use imported function
-      // Sort leaderboard by wins descending, then username ascending
       leaderboardData.value = response.data.sort((a, b) => {
         if (b.total_wins !== a.total_wins) {
             return b.total_wins - a.total_wins; // Higher wins first
@@ -335,12 +309,11 @@ export const useGameStore = defineStore('game', () => {
     }
   }
 
-  // --- NEW: Action for Attack Leaderboard ---
+  // --- Action for Attack Leaderboard ---
   async function fetchAttackLeaderboardData(sortBy = 'used', limit = 50) {
       isLoadingAttackLeaderboard.value = true;
       attackLeaderboardError.value = null;
       try {
-          // Use the imported API function
           const response = await apiFetchAttackLeaderboard(sortBy, limit);
           attackLeaderboardData.value = response.data; // Store the fetched data
       } catch (error) {
@@ -359,32 +332,28 @@ export const useGameStore = defineStore('game', () => {
       actionSuccessMessage.value = null;
       battleError.value = null;
       battleMessage.value = null;
-      // turnSummary.value = []; // Decide if this should be cleared here
   }
-
-  // --- REMOVED: Attack Generation Actions ---
 
   // Generate new attacks based on concept (and optionally favorites)
   async function generateAttacks(concept, favorite_attack_ids = []) { // Updated signature
     // isLoading can be handled by the component calling this
+    lastGeneratedAttacks.value = []; // Clear previous preview on new generation attempt
     try {
       const payload = {
         concept: concept,
         favorite_attack_ids: favorite_attack_ids
       };
           const response = await apiClient.post('/game/attacks/generate/', payload);
-      // The response should contain the newly generated attacks and a success message
-      // It might implicitly update the user's credits via the auth store refresh in the component
+      lastGeneratedAttacks.value = response.data.attacks || []; // Store the new preview
       return response.data; // Return the response { message: '...', attacks: [...] }
-      } catch (error) {
+    } catch (error) {
       console.error('Failed to generate attacks:', error.response?.data || error.message);
       const errorMessage = error.response?.data?.error || 'Failed to open booster.';
-      // Throw the error so the component can catch it and display it
       throw new Error(errorMessage); 
     }
   }
 
-  // --- NEW: Cancel outgoing challenge --- 
+  // --- Cancel outgoing challenge --- 
   async function cancelChallenge(battleId) {
     actionError.value = null;
     actionSuccessMessage.value = null;
@@ -412,6 +381,7 @@ export const useGameStore = defineStore('game', () => {
     users,
     pendingBattles,
     activeBattle,
+    lastGeneratedAttacks, // Export new state
     isLoadingUsers,
     isLoadingPendingBattles,
     isLoadingActiveBattle, // Exported loading state

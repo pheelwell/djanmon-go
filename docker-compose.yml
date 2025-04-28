@@ -5,13 +5,30 @@ services:
     image: postgres:15 # Or your preferred version
     container_name: djanmongo_postgres_db
     environment:
-      POSTGRES_DB: djanmongo_dev
-      POSTGRES_USER: djanmongo_user
-      POSTGRES_PASSWORD: djanmongo_password # Use a stronger password in production/secrets management
+      POSTGRES_DB: ${POSTGRES_DB:-djanmongo_dev} # Use env var or default
+      POSTGRES_USER: ${POSTGRES_USER:-djanmongo_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-djanmongo_password} # Use env var or default
     volumes:
       - postgres_data:/var/lib/postgresql/data/
     ports:
-      - "5433:5432" # Map host port 5433 to container port 5432 to avoid conflicts if you have postgres locally
+      - "5432:5432" # Map host port 5433 to container port 5432 to avoid conflicts if you have postgres locally
+
+  web:
+    build: . # Build the image from the Dockerfile in the current directory
+    container_name: djanmongo_web_app
+    # The CMD from the Dockerfile will be used unless overridden here
+    ports:
+      - "8008:80" # Map host port 8000 to container port 8000 (where Gunicorn listens)
+    env_file:
+      - .env # Load environment variables from .env file
+    depends_on:
+      - db # Wait for the db service to start before starting web
+    environment:
+      # Use the INTERNAL port (5432) for inter-container communication
+      - DATABASE_URL=postgres://djanmongo_user:djanmongo_password@db:5432/djanmongo_dev
+    # Optional: Uncomment for development live reload (requires Dockerfile adjustments)
+    # volumes:
+    #   - ./djanmongo:/app/djanmongo # Mount your backend code
 
 volumes:
   postgres_data: 

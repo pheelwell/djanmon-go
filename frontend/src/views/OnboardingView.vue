@@ -68,7 +68,7 @@ const user = computed(() => authStore.currentUser);
 
 // Computed properties to track progress
 const hasGeneratedAttacks = computed(() => {
-    // Directly check the authStore's reactive state
+    // Check the authStore's reactive state
     return authStore.currentUser?.attacks?.length > 0;
 });
 

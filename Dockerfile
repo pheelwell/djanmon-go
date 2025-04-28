@@ -65,4 +65,4 @@ ENTRYPOINT ["/app/entrypoint.sh"]
 
 # Specify the command to run your application using Gunicorn
 # Ensure djanmongo/wsgi.py exists and is configured
-CMD ["gunicorn", "--pythonpath", "djanmongo", "djanmongo.wsgi:application", "--bind", "0.0.0.0:80"] 
+CMD ["gunicorn", "--pythonpath", "djanmongo", "djanmongo.wsgi:application", "--bind", "0.0.0.0:8080", "--workers", "8", "--timeout", "300"]

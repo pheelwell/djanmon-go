@@ -103,9 +103,6 @@ const cardClasses = computed(() => [
 
 <template>
   <div :class="cardClasses">
-      <!-- REMOVED: Header with Picture -->
-      <!-- <div class="card-header"> ... </div> -->
-      <!-- RESTORED: Simple Header -->
       <h3>{{ player?.username }} <span v-if="player?.is_bot" class="bot-label">(BOT)</span></h3>
 
       <!-- Container for Badges -->
@@ -154,12 +151,6 @@ const cardClasses = computed(() => [
     border-radius: 0;
 }
 
-/* REMOVED: .card-header styles */
-/* REMOVED: .player-pic-container styles */
-/* REMOVED: .player-pic styles */
-/* REMOVED: .player-pic-placeholder styles */
-
-/* RESTORED: Simple Header Style */
 .player-card h3 { /* Player Name */
     margin: 0;
     color: var(--color-accent-secondary);
@@ -286,12 +277,4 @@ const cardClasses = computed(() => [
 .hp-bar-low {
     background-color: var(--color-hp-low);
 }
-
-/* Remove old progress element styles */
-/* progress { ... } */
-/* progress::-webkit-progress-bar { ... } */
-/* progress::-webkit-progress-value { ... } */
-/* progress::-moz-progress-bar { ... } */
-/* .hp-bar-user::-webkit-progress-value, ... etc */
-
 </style> 

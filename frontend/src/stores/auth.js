@@ -6,10 +6,8 @@ import router from '@/router';
 
 export const useAuthStore = defineStore('auth', () => {
   // --- State ---
-  // Remove token state
-  // const accessToken = ref(localStorage.getItem('accessToken') || null);
-  // const refreshToken = ref(localStorage.getItem('refreshToken') || null);
-  const user = ref(JSON.parse(localStorage.getItem('user') || 'null')); // Keep user state
+  // Tokens are handled by HttpOnly cookies now
+  const user = ref(JSON.parse(localStorage.getItem('user') || 'null'));
   const loginError = ref(null);
   const registerError = ref(null);
   const isUpdatingMoveset = ref(false);
@@ -20,7 +18,7 @@ export const useAuthStore = defineStore('auth', () => {
   const actionSuccessMessage = ref(null);
 
   // --- Getters ---
-  // Update isAuthenticated to check for user object instead of token
+  // isAuthenticated checks for the presence of the user object
   const isAuthenticated = computed(() => !!user.value);
   const currentUser = computed(() => user.value);
 
@@ -33,11 +31,7 @@ export const useAuthStore = defineStore('auth', () => {
         username,
         password,
       });
-      // No tokens to store
-      // accessToken.value = response.data.access;
-      // refreshToken.value = response.data.refresh;
-      // localStorage.setItem('accessToken', accessToken.value);
-      // localStorage.setItem('refreshToken', refreshToken.value);
+      // No tokens to store locally
       
       // Backend now returns user data on successful login
       user.value = response.data;
@@ -80,7 +74,7 @@ export const useAuthStore = defineStore('auth', () => {
     // Fetching profile is still useful on app load if a session exists,
     // or after certain actions to get updated data.
     try {
-      // apiClient now handles auth via cookies + csrf
+      // apiClient handles auth via cookies + csrf
       const response = await apiClient.get('/users/me/');
       user.value = response.data;
       localStorage.setItem('user', JSON.stringify(user.value));
@@ -95,6 +89,8 @@ export const useAuthStore = defineStore('auth', () => {
       user.value = null; // Clear user state
       localStorage.removeItem('user'); // Clear stored user data
       // The global response interceptor might also trigger logout/redirect
+
+      router.push({ name: 'login' }); 
     }
   }
 
@@ -114,32 +110,13 @@ export const useAuthStore = defineStore('auth', () => {
         localStorage.removeItem('user');
         
         // TODO: Ideally, clear the stored csrfToken in api.js as well.
-        // This requires either exporting a setter/clearer function from api.js
+        // This requires exporting a setter/clearer function from api.js
         // or managing the token within this store (more complex).
         // For now, the token will remain until the next fetch/page load.
 
         router.push({ name: 'login' }); 
     }
   }
-
-  // --- Refresh Token Logic (Placeholder) --- 
-  // REMOVE THIS SECTION
-  // async function refreshTokenIfNeeded() { ... }
-
-  // --- Initialization --- 
-  // Remove direct fetchUserProfile call here. Let app initialization handle it if needed.
-  // if (accessToken.value) {
-  //   fetchUserProfile();
-  // }
-
-  // --- Remove Store-Specific Interceptors --- 
-  // Remove the JWT request interceptor previously added here.
-  // The global interceptors in api.js handle session/CSRF now.
-  // apiClient.interceptors.request.use(config => { ... });
-
-  // Remove the response interceptor previously added here.
-  // A global one might still be useful in api.js or main.js.
-  // apiClient.interceptors.response.use(response => response, error => { ... });
 
   // --- Existing Actions (Keep as is, they use apiClient which now handles auth) ---
   async function updateSelectedAttacks(attackIds) {
@@ -206,11 +183,6 @@ export const useAuthStore = defineStore('auth', () => {
       if (!attackId) {
           throw new Error("Attack ID is required for deletion.");
       }
-      // Use state refs directly if needed, e.g., actionError.value = null;
-      // Or ensure actionError/actionSuccessMessage are defined in the setup function
-      // if they are not already.
-      // actionError.value = null; 
-      // actionSuccessMessage.value = null;
       try {
           // Ensure the API path matches your Django urls.py
           const response = await apiClient.delete(`/game/attacks/${attackId}/delete/`);
