@@ -191,8 +191,8 @@ async function executeDelete() { // Keep existing logic, but ensure it re-initia
         await authStore.deleteAttack(attackToDelete.value.id);
         successMessage.value = `Attack "${attackToDelete.value.name}" deleted.`;
         setTimeout(() => successMessage.value = null, 3000);
-        // Don't call initializeEditorLists, wait for watcher on user.attacks
-        // initializeManager(); // Refresh lists - Let watcher handle this now
+        // Explicitly re-initialize after successful deletion
+        initializeManager(); // <-- ADD THIS LINE
     } catch (err) {
         console.error("Deletion failed:", err);
         // Error message should be set in authStore.actionError

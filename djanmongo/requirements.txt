@@ -16,3 +16,4 @@ bleach
 google-generativeai
 python-dotenv
 pixellab
+cachalot

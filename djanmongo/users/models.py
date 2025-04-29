@@ -6,6 +6,10 @@ from django.db import models as db_models
 from django.utils import timezone # Added for default value
 import json # For JSONField default
 
+# --- NEW: Import Django Settings --- 
+from django.conf import settings
+# --- END NEW ---
+
 # Import Attack model safely for relationship definition
 from game.models import Attack
 
@@ -92,51 +96,58 @@ class User(AbstractUser):
         ).count()
 
     def get_nemesis(self):
-        """Finds the opponent the user has lost to the most."""
+        """Finds the opponent the user has lost to the most using DB aggregation."""
         from game.models import Battle
-        
-        # Find all finished battles the user lost
-        lost_battles = Battle.objects.filter(
-            Q(player1=self) | Q(player2=self), 
+        from django.db.models import Count, Case, When, F, Q, IntegerField # Import necessary functions
+
+        # Filter finished battles where this user participated but did not win
+        lost_battles_base_qs = Battle.objects.filter(
+            Q(player1=self) | Q(player2=self),
             status='finished'
         ).exclude(winner=self)
 
-        # Determine the opponent in each lost battle
-        opponent_ids = []
-        for battle in lost_battles:
-            if battle.player1 == self:
-                opponent_ids.append(battle.player2_id)
-            else:
-                opponent_ids.append(battle.player1_id)
-        
-        if not opponent_ids:
-            return None # No losses, no nemesis
+        # Annotate with the opponent's ID, group by it, count, and order
+        opponent_losses = lost_battles_base_qs.annotate(
+            # Determine opponent ID based on who player1/player2 is
+            opponent_id=Case(
+                When(player1=self, then=F('player2_id')),
+                When(player2=self, then=F('player1_id')),
+                # default=Value(None), # Should not happen due to the initial filter
+                output_field=IntegerField(), # Specify the output type
+            )
+        ).values(
+            'opponent_id' # Group by the annotated opponent_id
+        ).annotate(
+            losses=Count('opponent_id') # Count battles for each opponent_id group
+        ).order_by(
+            '-losses' # Order by the count descending to get the highest first
+        )
 
-        # Count losses against each opponent ID
-        loss_counts = {}
-        for opp_id in opponent_ids:
-            loss_counts[opp_id] = loss_counts.get(opp_id, 0) + 1
-        
-        # Find the opponent ID with the maximum losses
-        if not loss_counts:
-             return None
-             
-        nemesis_id = max(loss_counts, key=loss_counts.get)
-        
-        # Get the User object for the nemesis
-        try:
-            # Use the base manager to avoid any default filtering
-            nemesis_user = User._default_manager.get(pk=nemesis_id) 
-            return {
-                "username": nemesis_user.username,
-                "losses_against": loss_counts[nemesis_id]
-            }
-        except User.DoesNotExist:
-            return None # Should not happen if data is consistent
+        # Get the top result (the nemesis)
+        nemesis_data = opponent_losses.first()
+
+        if nemesis_data and nemesis_data.get('opponent_id') is not None:
+            try:
+                # Fetch the nemesis User object using the ID found
+                # No need for _default_manager here, standard manager is fine
+                nemesis_user = User.objects.get(pk=nemesis_data['opponent_id'])
+                return {
+                    "username": nemesis_user.username,
+                    "losses_against": nemesis_data['losses']
+                }
+            except User.DoesNotExist:
+                # This case should ideally not happen if foreign keys are intact
+                # Log an error maybe?
+                return None 
+        else:
+            # No losses found or opponent_id was somehow None
+            return None
 
     # --- NEW: Method to update stats after a battle --- 
     def update_stats_on_battle_end(self, is_winner, is_vs_bot, damage_dealt=0):
-        """Updates stats stored in the profile's JSON field after a battle."""
+        """Updates stats stored in the profile's JSON field after a battle.
+           Also updates the user's booster credits.
+        """
         # Ensure stats is a dictionary
         if not isinstance(self.stats, dict):
             # Attempt to load if it's a string, otherwise reset
@@ -157,16 +168,25 @@ class User(AbstractUser):
         self.stats['total_damage_dealt'] += damage_dealt
         # self.stats['total_battles'] += 1 # Optional
 
+        # --- NEW: Calculate and Update Booster Credits ---
+        credits_earned = 0
         if is_winner:
             if is_vs_bot:
                 self.stats['wins_vs_bot'] += 1
+                credits_earned = settings.CREDITS_WIN_VS_BOT # Use settings
             else:
                 self.stats['wins_vs_human'] += 1
+                credits_earned = settings.CREDITS_WIN_VS_HUMAN # Use settings
         else: # Loser
             if is_vs_bot:
                 self.stats['losses_vs_bot'] += 1
             else:
                 self.stats['losses_vs_human'] += 1
+            credits_earned = settings.CREDITS_LOSS # Use settings
 
-        # Save only the updated stats field
-        self.save(update_fields=['stats']) 
+        self.booster_credits = (self.booster_credits or 0) + credits_earned # Ensure booster_credits is not None
+        # --- END NEW ---
+
+        # Save the updated stats and booster_credits fields
+        self.save(update_fields=['stats', 'booster_credits'])
+        print(f"[Stats Update - User] User {self.username} awarded {credits_earned} credits. New total: {self.booster_credits}") # Add logging

@@ -165,10 +165,10 @@ class Battle(models.Model):
         ('player2', 'Player 2'),
     ]
 
-    player1 = models.ForeignKey(settings.AUTH_USER_MODEL, related_name='battles_as_player1', on_delete=models.CASCADE)
-    player2 = models.ForeignKey(settings.AUTH_USER_MODEL, related_name='battles_as_player2', on_delete=models.CASCADE)
-    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='pending')
-    winner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='battles_won')
+    player1 = models.ForeignKey(settings.AUTH_USER_MODEL, related_name='battles_as_player1', on_delete=models.CASCADE, db_index=True)
+    player2 = models.ForeignKey(settings.AUTH_USER_MODEL, related_name='battles_as_player2', on_delete=models.CASCADE, db_index=True)
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='pending', db_index=True)
+    winner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='battles_won', db_index=True)
 
     # Game state fields
     current_hp_player1 = models.IntegerField(default=100)

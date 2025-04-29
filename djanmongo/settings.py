@@ -51,6 +51,7 @@ INSTALLED_APPS = [
     'corsheaders',
     'djangoeditorwidgets', # <-- Add this
     'whitenoise', # Add whitenoise here too if not already
+    'cachalot', # <-- ADD django-cachalot
 
     # Your apps
     'users.apps.UsersConfig',
@@ -68,7 +69,6 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
-    'middleware.update_last_seen.UpdateLastSeenMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
@@ -267,3 +267,10 @@ BASE_MOMENTUM = 0      # Default starting momentum
 
 # --- Lua Integration ---
 LUA_SCRIPT_PATH = BASE_DIR / 'game' / 'lua_scripts'
+
+# --- NEW: Load Battle Reward Env Vars --- 
+# Load environment variables (consider using python-dotenv if not already handled)
+CREDITS_WIN_VS_HUMAN = int(os.environ.get('CREDITS_WIN_VS_HUMAN', '3'))
+CREDITS_WIN_VS_BOT = int(os.environ.get('CREDITS_WIN_VS_BOT', '2'))
+CREDITS_LOSS = int(os.environ.get('CREDITS_LOSS', '1'))
+# --- END NEW ---
